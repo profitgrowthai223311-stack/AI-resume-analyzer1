@@ -34,9 +34,10 @@ export function enforceFacts(resume: StructuredResume, source: string) {
     source.includes(l.url) ? true : (drop("link_not_in_source", l.url), false),
   );
   for (const f of ["email", "phone", "location"] as const)
-    if (out.header[f] && !inSource(out.header[f]))
-      (drop("header_not_in_source", `${f}: ${out.header[f]}`),
-        (out.header[f] = ""));
+    if (out.header[f] && !inSource(out.header[f])) {
+      drop("header_not_in_source", `${f}: ${out.header[f]}`);
+      out.header[f] = "";
+    }
   if (!inSource(out.header.name)) throw new Error("name_not_in_source");
 
   out.skills = out.skills
@@ -85,7 +86,10 @@ export function enforceFacts(resume: StructuredResume, source: string) {
   );
   if (out.summary) {
     const bad = numbers(out.summary).find((n) => !source.includes(n));
-    if (bad) (drop("summary_metric_not_in_source", bad), (out.summary = ""));
+    if (bad) {
+      drop("summary_metric_not_in_source", bad);
+      out.summary = "";
+    }
   }
   return { resume: out, warnings };
 }

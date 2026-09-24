@@ -7,6 +7,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { UsageMeter } from "@/components/billing/usage-meter";
+import {
+  FREE_MONTHLY_GENERATIONS,
+  getPlan,
+  monthlyUsage,
+} from "@/lib/server/plan";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Dashboard" };
@@ -26,6 +32,15 @@ export default async function DashboardPage() {
     .order("created_at", { ascending: false })
     .limit(5);
 
+  const uid = claims?.claims.sub ?? "";
+  const plan = await getPlan(supabase, uid);
+  const used = await monthlyUsage(supabase, uid);
+  const { data: versions } = await supabase
+    .from("resume_versions")
+    .select("id, label, version_number, status")
+    .order("created_at", { ascending: false })
+    .limit(3);
+
   const name =
     profile?.full_name ||
     (claims?.claims.email as string | undefined) ||
@@ -39,11 +54,15 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle>Usage</CardTitle>
             <CardDescription>
-              Free plan: 2 tailored resumes per month
+              {plan === "pro" ? "Pro plan" : "Free plan"}
             </CardDescription>
           </CardHeader>
-          <CardContent className="text-muted-foreground text-sm">
-            Usage tracking arrives in Phase 7.
+          <CardContent>
+            <UsageMeter
+              used={used}
+              limit={FREE_MONTHLY_GENERATIONS}
+              plan={plan}
+            />
           </CardContent>
         </Card>
         <Card>
@@ -69,6 +88,26 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent versions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="space-y-1 text-sm">
+            {versions?.map((v) => (
+              <li key={v.id}>
+                <Link href={`/versions/${v.id}`} className="underline">
+                  {v.label ?? "Tailored resume"} v{v.version_number}
+                </Link>{" "}
+                <span className="text-muted-foreground">({v.status})</span>
+              </li>
+            ))}
+            {!versions?.length && (
+              <li className="text-muted-foreground">None yet.</li>
+            )}
+          </ul>
+        </CardContent>
+      </Card>
     </div>
   );
 }
