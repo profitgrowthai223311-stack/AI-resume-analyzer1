@@ -1,4 +1,5 @@
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -18,6 +19,12 @@ export default async function DashboardPage() {
     .select("full_name")
     .eq("id", claims?.claims.sub ?? "")
     .maybeSingle();
+
+  const { data: resumes } = await supabase
+    .from("resumes")
+    .select("id, display_name, created_at")
+    .order("created_at", { ascending: false })
+    .limit(5);
 
   const name =
     profile?.full_name ||
@@ -41,14 +48,24 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Recent versions</CardTitle>
-            <CardDescription>Nothing here yet</CardDescription>
+            <CardTitle>Your resumes</CardTitle>
+            <CardDescription>
+              {resumes?.length ? "Most recent uploads" : "Nothing here yet"}
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <Button disabled>Create tailored resume</Button>
-            <p className="text-muted-foreground mt-2 text-xs">
-              Enabled once uploads ship in Phase 2.
-            </p>
+          <CardContent className="space-y-3">
+            <ul className="space-y-1 text-sm">
+              {resumes?.map((r) => (
+                <li key={r.id}>
+                  <Link href={`/resumes/${r.id}`} className="underline">
+                    {r.display_name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <Link href="/resumes/new" className={buttonVariants()}>
+              Upload a resume
+            </Link>
           </CardContent>
         </Card>
       </div>
