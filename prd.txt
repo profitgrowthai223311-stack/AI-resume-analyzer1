@@ -1,0 +1,728 @@
+# PRD — AI Resume Analyzer & Auto-Update SaaS
+
+## 1. Product overview
+
+A SaaS application that helps job seekers tailor an existing resume to a specific job description without inventing experience. Users upload a resume, add a target job description, receive an ATS analysis, and generate a truthful, ATS-optimized resume as both compilable LaTeX and downloadable PDF.
+
+Primary course stack: Next.js, Supabase Auth/Database/Storage/Edge Functions, OpenAI SDK, Razorpay, GitHub, and Netlify.
+
+### Core user flow
+
+```text
+Sign up / log in
+→ Upload resume
+→ Extract and review resume content
+→ Paste job description
+→ ATS analysis
+→ Generate tailored LaTeX resume
+→ Validate / compile LaTeX into PDF
+→ View, download, and save version history
+→ Upgrade when free usage is exhausted
+```
+
+## 2. Goals
+
+- Demonstrate a complete production-style SaaS workflow in a Claude Code course.
+- Let users tailor resumes to job descriptions while preserving factual information.
+- Generate strict, compilable LaTeX and a polished PDF.
+- Store source files, generated files, metadata, and version history securely.
+- Implement subscriptions using Razorpay.
+- Teach practical concepts: authentication, file uploads, Edge Functions, AI orchestration, webhooks, authorization, deployment, and Git workflows.
+
+## 3. Non-goals
+
+- Guarantee interviews, hiring outcomes, or an actual 95–99% ATS match.
+- Fabricate experience, employers, dates, degrees, projects, certifications, achievements, or metrics.
+- Act as a replacement for professional legal, immigration, or career advice.
+- Build a general-purpose visual drag-and-drop resume editor in MVP.
+- Support every file type in MVP; support PDF and DOCX first.
+- Store payment card data; Razorpay remains the payment processor.
+
+## 4. Personas
+
+### Job seeker
+
+Wants to adapt one resume for many applications quickly, view the result, and download a professional PDF.
+
+### Career-focused student
+
+Has limited experience and needs a clear tailored resume while keeping all education, projects, and facts accurate.
+
+### Course learner/developer
+
+Builds the product alongside the course and learns how an AI SaaS moves from local development to production.
+
+### Admin/operator
+
+Monitors generation failures, payment webhook delivery, storage use, and abuse indicators.
+
+## 5. User journeys
+
+### New user generates a resume
+
+1. User signs up with email/password, magic link, or OAuth.
+2. They land on an empty dashboard and click “Create tailored resume.”
+3. They upload a PDF or DOCX resume.
+4. The app extracts text and presents it for review and correction.
+5. The user pastes a job description and gives the version a label, such as “Frontend Engineer — Acme.”
+6. The system analyzes resume-to-JD keyword alignment.
+7. The user reviews the match analysis and clicks “Generate tailored resume.”
+8. The system produces LaTeX, validates it, compiles it to PDF, and saves the output.
+9. The user previews, downloads, or creates another version.
+
+### Returning user
+
+1. User opens Resume History.
+2. They select an existing resume source.
+3. They add a new job description.
+4. They create a new immutable tailored-resume version.
+5. They compare metadata, view the PDF, or download the LaTeX/PDF.
+
+### Free user upgrades
+
+1. User reaches their monthly generation limit.
+2. The app explains the limit and shows Pro benefits.
+3. User completes Razorpay Checkout.
+4. Razorpay webhook activates their subscription.
+5. Feature access updates without trusting client-side payment status.
+
+## 6. Plans and feature gating
+
+| Feature | Free | Pro |
+|---|---:|---:|
+| Resume uploads | 2 total or configurable | Unlimited |
+| Tailored generations | 2/month | Unlimited, subject to fair use |
+| ATS match overview | Yes | Yes |
+| Detailed keyword gap analysis | Basic | Full |
+| PDF download | Yes | Yes |
+| LaTeX download | No or limited | Yes |
+| Resume history | Latest 2 versions | Full history |
+| Priority generation | No | Yes |
+
+Suggested initial pricing: ₹199/month or ₹1,499/year. Keep plan identifiers and prices server-configured, not hard-coded in the UI.
+
+## 7. Functional requirements
+
+### Authentication and profile
+
+- Use Supabase Auth for sign-up, sign-in, password reset, logout, and session refresh.
+- Create a `profiles` record on first sign-up.
+- All user data must be scoped to `auth.uid()`.
+- Users can delete their resume data and account-related files.
+
+### Resume upload and extraction
+
+- Accept PDF and DOCX in MVP.
+- Enforce configurable size limits, e.g. 10 MB.
+- Upload original documents to a private Supabase Storage bucket.
+- Create a resume record with status `uploaded`.
+- Invoke a Supabase Edge Function to extract text.
+- Store extracted raw text, structured content when possible, parsing warnings, and parser version.
+- Let users edit extracted text before generation. The edited text becomes the generation source of truth.
+
+### Job descriptions
+
+- Users can paste a job description.
+- Store title, employer, location, full text, and normalized text where available.
+- Extract keywords, skills, responsibilities, seniority, and location.
+- Permit user edits before analysis/generation.
+
+### ATS analysis
+
+- Compare normalized resume content and job-description requirements.
+- Return a transparent advisory score, matched keywords, missing keywords, and suggestions.
+- Mark a keyword as “safe to add” only if it is evidenced by the original resume.
+- Clearly distinguish:
+  - matched evidence;
+  - related but unproven skills;
+  - unsupported requirements.
+- Never represent the score as a hiring guarantee.
+
+### Generation and versioning
+
+- Create a new immutable version for every successful generation.
+- Preserve original resume facts, source extraction, JD snapshot, AI model configuration, analysis result, LaTeX source, PDF, status, timestamps, and error details.
+- Let a user view, download, and optionally delete a version.
+- Users may create a new version from the same source resume and a different JD.
+
+## 8. Architecture
+
+```text
+Next.js web app on Netlify
+        |
+        | Supabase client / authenticated requests
+        v
+Supabase Auth ── Profiles / RLS
+Supabase Postgres ── resumes, jobs, analyses, versions, subscriptions
+Supabase Storage ── private originals, .tex, PDFs
+        |
+        v
+Supabase Edge Functions
+  ├─ extract-resume
+  ├─ analyze-ats
+  ├─ generate-resume
+  ├─ compile-pdf
+  ├─ create-checkout
+  └─ razorpay-webhook
+        |
+        ├─ parser provider / parsing library
+        ├─ OpenAI SDK / AI model
+        ├─ latex.ytotech.com/builds/sync
+        └─ Razorpay APIs
+```
+
+The browser must never receive the OpenAI, Razorpay secret, Supabase service-role, or compiler credentials.
+
+## 9. Data model
+
+### `profiles`
+
+- `id uuid primary key references auth.users`
+- `full_name text`
+- `avatar_url text`
+- `created_at timestamptz`
+- `updated_at timestamptz`
+
+### `resumes`
+
+Represents the user’s original uploaded resume.
+
+- `id uuid primary key`
+- `user_id uuid references profiles`
+- `display_name text`
+- `original_file_path text`
+- `original_file_type text`
+- `original_file_size bigint`
+- `extracted_text text`
+- `structured_content jsonb`
+- `extraction_status text` — `uploaded | processing | complete | failed`
+- `extraction_error text`
+- `parser_name text`
+- `parser_version text`
+- `created_at timestamptz`
+- `updated_at timestamptz`
+
+### `job_descriptions`
+
+- `id uuid primary key`
+- `user_id uuid references profiles`
+- `title text`
+- `company_name text`
+- `location text`
+- `raw_text text`
+- `normalized_text text`
+- `extracted_requirements jsonb`
+- `created_at timestamptz`
+
+### `ats_analyses`
+
+- `id uuid primary key`
+- `user_id uuid references profiles`
+- `resume_id uuid references resumes`
+- `job_description_id uuid references job_descriptions`
+- `score integer check (score between 0 and 100)`
+- `matched_keywords jsonb`
+- `missing_keywords jsonb`
+- `evidence_map jsonb`
+- `recommendations jsonb`
+- `model_metadata jsonb`
+- `created_at timestamptz`
+
+### `resume_versions`
+
+- `id uuid primary key`
+- `user_id uuid references profiles`
+- `resume_id uuid references resumes`
+- `job_description_id uuid references job_descriptions`
+- `analysis_id uuid references ats_analyses`
+- `version_number integer`
+- `label text`
+- `status text` — `queued | generating | validating | compiling | ready | failed`
+- `source_snapshot text`
+- `job_description_snapshot text`
+- `latex_content text`
+- `latex_storage_path text`
+- `pdf_storage_path text`
+- `validation_result jsonb`
+- `generation_metadata jsonb`
+- `error_code text`
+- `error_message text`
+- `created_at timestamptz`
+- `completed_at timestamptz`
+
+Unique constraint: `(resume_id, version_number)`.
+
+### `subscriptions`
+
+- `id uuid primary key`
+- `user_id uuid references profiles unique`
+- `plan_code text`
+- `status text` — `inactive | active | past_due | cancelled | expired`
+- `razorpay_customer_id text`
+- `razorpay_subscription_id text unique`
+- `current_period_end timestamptz`
+- `created_at timestamptz`
+- `updated_at timestamptz`
+
+### `usage_events`
+
+- `id uuid primary key`
+- `user_id uuid references profiles`
+- `event_type text` — `resume_generation`
+- `resume_version_id uuid`
+- `occurred_at timestamptz`
+
+### `payment_events`
+
+- `id uuid primary key`
+- `provider_event_id text unique`
+- `event_type text`
+- `payload jsonb`
+- `processed_at timestamptz`
+- `processing_error text`
+
+## 10. Authorization and storage
+
+Enable Row Level Security on all application tables.
+
+- Users can only select, create, update, and delete rows where `user_id = auth.uid()`.
+- The client may never update subscription status, usage counters, or payment events.
+- Edge Functions use the authenticated user token for user-scoped actions, and service-role access only where necessary.
+- Use private storage buckets:
+  - `original-resumes`
+  - `generated-latex`
+  - `generated-pdfs`
+- Issue short-lived signed URLs for preview/download.
+- Suggested path convention: `{user_id}/{resume_id}/{version_id}/resume.pdf`.
+
+## 11. Edge Function contracts
+
+### `POST /extract-resume`
+
+Input:
+
+```json
+{ "resumeId": "uuid" }
+```
+
+Behavior:
+
+- Verify ownership.
+- Read original file from private storage.
+- Extract text from PDF/DOCX.
+- Normalize text and optionally derive structured sections.
+- Update the resume extraction state.
+
+Response:
+
+```json
+{
+  "resumeId": "uuid",
+  "status": "complete",
+  "extractedText": "…",
+  "warnings": []
+}
+```
+
+### `POST /analyze-ats`
+
+Input:
+
+```json
+{
+  "resumeId": "uuid",
+  "jobDescriptionId": "uuid"
+}
+```
+
+Response:
+
+```json
+{
+  "analysisId": "uuid",
+  "score": 72,
+  "matchedKeywords": ["Next.js", "TypeScript"],
+  "missingKeywords": ["CI/CD"],
+  "unsupportedRequirements": ["AWS certification"],
+  "recommendations": []
+}
+```
+
+### `POST /generate-resume`
+
+Input:
+
+```json
+{
+  "resumeId": "uuid",
+  "jobDescriptionId": "uuid",
+  "label": "Acme Frontend Engineer"
+}
+```
+
+Behavior:
+
+- Verify authorization and plan usage.
+- Create a version with `queued` status.
+- Generate ATS analysis if none exists.
+- Call the AI model.
+- Validate LaTeX and factual constraints.
+- Store `.tex`, compile PDF, and update version status.
+
+Response:
+
+```json
+{
+  "versionId": "uuid",
+  "status": "queued"
+}
+```
+
+The frontend polls `GET /resume-versions/:id` or uses Supabase Realtime until the status is `ready` or `failed`.
+
+### `POST /compile-pdf`
+
+Internal-only function. Receives a validated `versionId`, writes `resume.tex`, submits a multipart request to the compiler, validates the returned PDF, and uploads it to private storage.
+
+### `POST /create-checkout`
+
+Creates a Razorpay customer/subscription or payment link for the authenticated user and returns checkout data.
+
+### `POST /razorpay-webhook`
+
+- Verify `X-Razorpay-Signature` using the webhook secret.
+- Store event idempotently in `payment_events`.
+- Update `subscriptions` only from verified events.
+- Handle activated, charged, cancelled, halted, and expired events.
+
+## 12. AI and ATS pipeline
+
+### Step 1: Parse and normalize
+
+Extract plain text and structured fields such as header, experience, education, projects, certifications, and skills. Preserve a source snapshot so future parsing changes do not rewrite history.
+
+### Step 2: Analyze JD
+
+Use deterministic preprocessing plus AI-assisted extraction to identify:
+
+- exact role title;
+- required and preferred skills;
+- responsibilities;
+- domain terms;
+- seniority;
+- location;
+- important action verbs;
+- tools and certifications.
+
+### Step 3: Build a factual evidence map
+
+The system must connect every proposed skill, metric, or claim to text from the original resume.
+
+```json
+{
+  "claim": "Built Next.js dashboard",
+  "sourceEvidence": "Developed internal dashboard using Next.js",
+  "allowed": true
+}
+```
+
+If no evidence exists, the model must not add the claim. A missing JD skill may be suggested to the user, but must not be inserted as experience.
+
+### Step 4: Generate LaTeX
+
+Call the model through the OpenAI SDK from a server-side Edge Function. Send:
+
+- strict system prompt/template supplied for the course;
+- original normalized resume content;
+- structured resume JSON;
+- job description;
+- ATS analysis;
+- evidence map;
+- explicit anti-fabrication rule.
+
+Use a low-temperature setting for predictable formatting. Store model name, prompt-template version, request id, and timestamps—never expose sensitive content in public logs.
+
+### Step 5: Validate output
+
+Before compiling:
+
+- output starts with `\documentclass`;
+- output ends exactly with `\end{document}`;
+- no Markdown fences or prose exist;
+- required preamble/template is present;
+- only allowed sections appear, in order;
+- every special character is escaped;
+- all LaTeX environments are balanced;
+- no dangerous LaTeX commands such as `\input`, `\include`, `\write18`, shell escapes, external URLs beyond allowed links, or filesystem reads are present;
+- company names, job titles, dates, education, and certification names match original facts;
+- metric claims are present in source evidence.
+
+### Important product correction
+
+The supplied prompt requires exactly eight bullets and real metrics for every company. Many real resumes will not provide eight evidence-backed bullets or four real metrics per role. The production system must not fabricate data to satisfy formatting rules.
+
+If evidence is insufficient, it should either:
+
+1. ask the user to supply missing achievements/metrics; or
+2. generate only source-supported content and return a visible validation warning.
+
+For the course, this is a valuable lesson: ATS optimization must not become false resume writing.
+
+## 13. LaTeX-to-PDF workflow
+
+1. Store validated raw LaTeX as `resume.tex`.
+2. Convert the LaTeX string to UTF-8 binary content, equivalent to the n8n “Convert to File” step.
+3. `POST` multipart form data to `https://latex.ytotech.com/builds/sync`.
+4. Send:
+   - `compiler=pdflatex`
+   - binary `resources` containing `resume.tex`
+5. Receive PDF binary.
+6. Verify response type, size, PDF signature, and successful compilation.
+7. Upload PDF to `generated-pdfs` private bucket.
+8. Update `resume_versions` with its storage path and `ready` status.
+
+On compiler failure, store sanitized compiler errors, mark the version failed, and offer “Try again” after correction. Never expose internal secrets or raw service errors.
+
+## 14. Frontend pages and components
+
+### Public pages
+
+- `/` — product landing page, value proposition, pricing, CTA.
+- `/pricing` — Free vs Pro, Razorpay checkout entry.
+- `/auth/login`, `/auth/signup`, `/auth/reset-password`.
+
+### Authenticated pages
+
+- `/dashboard` — usage, recent versions, create button.
+- `/resumes/new` — file upload and extraction progress.
+- `/resumes/[resumeId]` — original resume details and version list.
+- `/resumes/[resumeId]/tailor` — editable extracted text, JD form, ATS analysis, generate action.
+- `/versions/[versionId]` — generation progress, ATS result, LaTeX view, PDF preview, download actions.
+- `/history` — all generated versions and filters.
+- `/billing` — plan, usage, current subscription, manage subscription.
+- `/settings` — profile, data deletion, account preferences.
+
+### Key components
+
+- `AuthGuard`
+- `ResumeUploader`
+- `ExtractionReviewEditor`
+- `JobDescriptionForm`
+- `AtsScoreCard`
+- `KeywordMatchTable`
+- `GenerationProgress`
+- `PdfViewer`
+- `VersionTimeline`
+- `DownloadButtons`
+- `UsageMeter`
+- `UpgradeModal`
+- `SubscriptionStatusCard`
+
+## 15. Security and privacy
+
+- Treat resumes as sensitive personal data.
+- Use HTTPS, private object storage, signed URLs, RLS, and server-only secrets.
+- Validate MIME type, file signature, size, and filename on upload.
+- Rate-limit extraction, generation, and checkout endpoints.
+- Sanitize parser output before displaying it.
+- Restrict LaTeX commands and use a sandboxed third-party compiler workflow.
+- Maintain a deletion workflow for source files, generated files, and records.
+- Make privacy policy and AI data handling clear before launch.
+- Avoid logging raw resume/JD contents in analytics and error logs.
+- Obtain consent before sending content to the AI provider and PDF compiler.
+
+## 16. Error handling
+
+| Scenario | User-facing behavior | System behavior |
+|---|---|---|
+| Unsupported/corrupt upload | Explain accepted file types and retry | Log validation event |
+| Parser failure | Offer text paste/edit fallback | Store safe error state |
+| AI timeout | “Generation is taking longer than expected” + retry | Idempotent job retry |
+| Invalid LaTeX | Report safe validation issue | Preserve invalid output privately for debugging policy |
+| PDF compiler failure | Show compile error and retry | Store sanitized compiler diagnostics |
+| Quota reached | Show upgrade path | Do not create generation job |
+| Payment webhook delay | Show “payment processing” | Reconcile with Razorpay webhook |
+| Unauthorized access | Redirect to login/403 | Log security event |
+
+## 17. Observability
+
+Track structured events:
+
+- sign-up completed;
+- upload accepted/rejected;
+- extraction duration/failure;
+- ATS-analysis duration;
+- generation duration/failure;
+- validation failures by rule;
+- PDF compilation duration/failure;
+- download events;
+- checkout started/completed;
+- webhook success/failure;
+- free-limit blocks.
+
+Monitor:
+
+- Edge Function errors;
+- queue/backlog length if jobs become asynchronous;
+- AI and compiler latency;
+- storage volume;
+- retry counts;
+- successful-generation rate;
+- conversion from free to paid.
+
+Use request and version IDs to correlate one generation from upload through PDF output.
+
+## 18. Acceptance criteria
+
+- A user can sign up and access only their own records/files.
+- A user can upload a valid PDF or DOCX and review extracted content.
+- A user can paste a JD and receive an explainable ATS analysis.
+- A generation creates a unique saved version.
+- Generated LaTeX follows the strict template and passes validation.
+- Unsupported claims and metrics are blocked or flagged for user input.
+- A successful version provides an in-app PDF preview and signed downloads for PDF and allowed LaTeX access.
+- PDF is compiled using the configured multipart `pdflatex` flow.
+- A free user cannot exceed their configured monthly allowance.
+- Verified Razorpay webhooks activate Pro access.
+- All key tables and storage objects enforce user-scoped authorization.
+- Production deployment works on Netlify with environment variables configured securely.
+
+## 19. MVP scope
+
+Build first:
+
+- Supabase Auth;
+- PDF/DOCX upload;
+- extraction with editable plain-text fallback;
+- JD input;
+- basic ATS keyword matching;
+- one strict AI resume template;
+- LaTeX validation;
+- external PDF compilation;
+- private file storage;
+- view/download PDF;
+- saved version history;
+- Free plan with two generations/month;
+- Razorpay subscription and verified webhook;
+- Netlify deployment.
+
+## 20. Future scope
+
+- Multiple resume templates.
+- DOCX output.
+- Side-by-side source vs generated comparison.
+- User-approved editing of individual bullets.
+- Cover-letter generation.
+- LinkedIn profile import.
+- Application tracker.
+- AI interview preparation companion.
+- Team/career-coach workspaces.
+- More robust background-job queue and email notifications.
+- Regional templates, languages, and accessibility improvements.
+
+## 21. Phased Claude Code course plan
+
+### Phase 0 — Product setup
+
+- Initialize Next.js with TypeScript.
+- Add UI system, environment-variable strategy, linting, and formatting.
+- Create GitHub repository, `main` branch protection, README, issue templates, and `.env.example`.
+
+Course lesson: use Claude Code to scaffold a clean app, explain decisions, and keep commits small.
+
+### Phase 1 — Authentication and dashboard
+
+- Configure Supabase project and Auth.
+- Create `profiles` table, RLS policies, protected layout, login/signup pages, and dashboard shell.
+
+Milestone: users can sign in and see a private dashboard.
+
+### Phase 2 — Database, storage, and resume upload
+
+- Create migrations for core schema.
+- Configure private storage buckets and policies.
+- Build upload UI, file validation, original-file storage, and resume records.
+
+Milestone: user uploads are private and visible only to their owner.
+
+### Phase 3 — Parsing and extraction review
+
+- Build `extract-resume` Edge Function.
+- Add parser integration and plain-text fallback.
+- Build extraction progress and editable review screen.
+
+Milestone: upload becomes user-approved source text.
+
+### Phase 4 — ATS analysis
+
+- Build JD form, normalization, keyword extraction, score, evidence map, and gap analysis UI.
+- Clearly label score as guidance, not a hiring guarantee.
+
+Milestone: user understands alignment before generating.
+
+### Phase 5 — AI generation and guardrails
+
+- Implement the version model and `generate-resume`.
+- Add the supplied strict LaTeX system prompt as version-controlled server code.
+- Add evidence-based anti-fabrication validation and output checks.
+
+Milestone: valid LaTeX is stored as a resume version.
+
+### Phase 6 — PDF compiler integration
+
+- Implement UTF-8 `.tex` conversion and multipart compiler request.
+- Validate returned PDF, upload it privately, and build preview/download UI.
+- Handle compiler errors gracefully.
+
+Milestone: complete upload-to-PDF workflow.
+
+### Phase 7 — Billing and gating
+
+- Add Free quota checks.
+- Implement Razorpay checkout and webhook verification.
+- Add billing/upgrade UX and server-side Pro gating.
+
+Milestone: plans work securely without client-trusted billing state.
+
+### Phase 8 — Production readiness and deployment
+
+- Add error states, rate limits, analytics, monitoring, and privacy/deletion controls.
+- Configure Netlify environment variables and deploy previews.
+- Test production flows with a test Razorpay account.
+- Create release tag and launch checklist.
+
+Milestone: deployed SaaS suitable for a course demo.
+
+## 22. GitHub workflow
+
+- `main`: production-ready branch.
+- `develop`: optional integration branch for course development.
+- Feature branches: `feature/auth`, `feature/resume-upload`, `feature/ats-analysis`, `feature/pdf-generation`, `feature/payments`.
+- One focused commit per teachable unit.
+- Pull requests should include screenshots, test notes, migration notes, and environment-variable changes.
+- Use Netlify deploy previews for pull requests.
+- Never commit `.env.local`, API keys, service-role keys, Razorpay secrets, or real user resumes.
+
+## 23. Netlify deployment checklist
+
+- Connect GitHub repository.
+- Set build command and Next.js plugin/runtime configuration.
+- Add public Supabase URL/key and server-only secrets as protected environment variables.
+- Configure Supabase Auth redirect URLs for local, preview, and production domains.
+- Configure Razorpay webhook URL to the production Edge Function endpoint.
+- Test private signed PDF downloads in production.
+- Verify error monitoring, policy enforcement, and payment webhook signatures.
+
+## 24. Success metrics
+
+- Upload-to-ready-PDF completion rate.
+- Median generation completion time.
+- LaTeX validation pass rate.
+- PDF compilation success rate.
+- Percentage of generations requiring user correction.
+- Weekly active users.
+- Free-to-Pro conversion.
+- Resume-version downloads per active user.
+- Payment webhook processing success rate.
+
+This product should be taught as a truthful “AI-assisted resume tailoring” tool—not a system that fabricates qualifications. That distinction makes the project safer, more credible, and much stronger as a real SaaS case study.
