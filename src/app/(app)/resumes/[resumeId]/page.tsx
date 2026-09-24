@@ -1,4 +1,7 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { ExtractionReviewEditor } from "@/components/resume/extraction-review-editor";
+import { buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -20,7 +23,7 @@ export default async function ResumePage({
   const { data: resume } = await supabase
     .from("resumes")
     .select(
-      "id, display_name, original_file_type, original_file_size, extraction_status, created_at",
+      "id, display_name, original_file_type, original_file_size, extraction_status, extraction_error, extracted_text, structured_content, created_at",
     )
     .eq("id", resumeId)
     .maybeSingle();
@@ -43,6 +46,31 @@ export default async function ResumePage({
           <Badge variant="secondary">{resume.extraction_status}</Badge>
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Extracted text</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ExtractionReviewEditor
+            resumeId={resume.id}
+            initialText={resume.extracted_text ?? ""}
+            status={resume.extraction_status}
+            error={resume.extraction_error}
+            warnings={
+              (resume.structured_content as { warnings?: string[] } | null)
+                ?.warnings ?? []
+            }
+          />
+        </CardContent>
+      </Card>
+      {resume.extracted_text && (
+        <Link
+          href={`/resumes/${resume.id}/tailor`}
+          className={buttonVariants()}
+        >
+          Continue: add a job description
+        </Link>
+      )}
     </div>
   );
 }

@@ -60,6 +60,12 @@ export function ResumeUploader() {
         await supabase.storage.from("original-resumes").remove([path]);
         return setError("Could not save your resume. Please try again.");
       }
+      // Extraction failure is not fatal: the review page offers a paste-text fallback.
+      await fetch("/api/extract-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeId: id }),
+      }).catch(() => undefined);
       router.push(`/resumes/${id}`);
     } finally {
       setBusy(false);
@@ -80,7 +86,7 @@ export function ResumeUploader() {
         </p>
       )}
       <Button type="submit" disabled={busy}>
-        {busy ? "Uploading…" : "Upload resume"}
+        {busy ? "Uploading and reading…" : "Upload resume"}
       </Button>
     </form>
   );

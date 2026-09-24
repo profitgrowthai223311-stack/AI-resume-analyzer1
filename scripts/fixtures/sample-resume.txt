@@ -1,0 +1,24 @@
+Jane Doe
+jane.doe@example.com | +91 98765 43210 | Bengaluru, India | github.com/janedoe
+
+Summary
+Frontend engineer with 4 years of experience building React and Next.js applications.
+
+Experience
+Acme Corp — Frontend Engineer, Jan 2022 – Present
+- Developed internal dashboard using Next.js and TypeScript used by 200 employees.
+- Reduced page load time by 35% by introducing code splitting and image optimization.
+- Collaborated with designers and backend engineers in an agile team.
+
+Beta Labs — Junior Web Developer, Jun 2020 – Dec 2021
+- Built responsive landing pages with HTML, CSS and JavaScript.
+- Integrated REST APIs and wrote unit tests with Jest.
+
+Education
+B.Tech in Computer Science, VIT University, 2016 – 2020
+
+Skills
+JavaScript, TypeScript, React, Next.js, HTML, CSS, Jest, Git, REST APIs
+
+Certifications
+Meta Front-End Developer Certificate

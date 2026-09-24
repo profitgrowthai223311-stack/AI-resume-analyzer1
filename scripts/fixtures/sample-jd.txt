@@ -1,0 +1,4 @@
+Frontend Engineer — Globex Inc, Remote (India)
+We are looking for a Frontend Engineer to build our customer-facing web app.
+Requirements: 3+ years with React, Next.js and TypeScript. Experience with CI/CD pipelines, GraphQL, and performance optimization. Familiarity with Jest and Cypress testing. AWS certification is a plus.
+Responsibilities: build reusable UI components, collaborate with designers, improve page load performance, mentor junior developers.
