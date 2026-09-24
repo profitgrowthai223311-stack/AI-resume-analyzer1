@@ -3,8 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { UploadCloud } from "lucide-react";
 import {
   ALLOWED_TYPES,
   MAX_UPLOAD_MB,
@@ -72,20 +71,62 @@ export function ResumeUploader() {
     }
   }
 
+  const [fileName, setFileName] = useState<string>();
+  const [drag, setDrag] = useState(false);
+
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="file">
-          Resume (PDF or DOCX, up to {MAX_UPLOAD_MB} MB)
-        </Label>
-        <Input id="file" name="file" type="file" accept=".pdf,.docx" required />
-      </div>
+      <label
+        htmlFor="file"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDrag(true);
+        }}
+        onDragLeave={() => setDrag(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDrag(false);
+          const f = e.dataTransfer.files[0];
+          const input = document.getElementById("file") as HTMLInputElement;
+          if (f && input) {
+            const dt = new DataTransfer();
+            dt.items.add(f);
+            input.files = dt.files;
+            setFileName(f.name);
+          }
+        }}
+        className={
+          "flex cursor-pointer flex-col items-center gap-3 rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors " +
+          (drag
+            ? "border-primary bg-accent"
+            : "border-border hover:border-primary/60 hover:bg-muted/50")
+        }
+      >
+        <span className="bg-brand-gradient shadow-glow flex size-14 items-center justify-center rounded-2xl text-white">
+          <UploadCloud className="size-7" />
+        </span>
+        <span className="font-semibold">
+          {fileName ?? "Drop your resume here, or click to browse"}
+        </span>
+        <span className="text-muted-foreground text-sm">
+          PDF or DOCX, up to {MAX_UPLOAD_MB} MB
+        </span>
+        <input
+          id="file"
+          name="file"
+          type="file"
+          accept=".pdf,.docx"
+          required
+          className="sr-only"
+          onChange={(e) => setFileName(e.target.files?.[0]?.name)}
+        />
+      </label>
       {error && (
         <p role="alert" className="text-destructive text-sm">
           {error}
         </p>
       )}
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" disabled={busy} size="lg" className="w-full">
         {busy ? "Uploading and reading…" : "Upload resume"}
       </Button>
     </form>

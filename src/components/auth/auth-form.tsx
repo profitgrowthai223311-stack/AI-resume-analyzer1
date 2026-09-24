@@ -48,7 +48,7 @@ export function AuthForm({
           {state.message}
         </p>
       )}
-      <Button type="submit" className="w-full" disabled={pending}>
+      <Button type="submit" size="lg" className="w-full" disabled={pending}>
         {pending ? "Please wait…" : submitLabel}
       </Button>
     </form>

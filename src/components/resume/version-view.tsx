@@ -1,15 +1,25 @@
 "use client";
 
+import {
+  AlertCircle,
+  CheckCircle2,
+  Circle,
+  Download,
+  FileCode2,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { UpgradeModal } from "@/components/billing/upgrade-modal";
+import { PageHeader } from "@/components/page-header";
 import {
   AtsScoreCard,
   KeywordMatchTable,
   type Gap,
   type Hit,
 } from "@/components/resume/ats-results";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
@@ -102,15 +112,14 @@ export function VersionView({
       .select("score, matched_keywords, missing_keywords")
       .eq("id", v.analysis_id)
       .single()
-      .then(
-        ({ data }) =>
-          data &&
+      .then(({ data }) => {
+        if (data)
           setAnalysis({
             score: data.score,
             matched: data.matched_keywords ?? [],
             gaps: data.missing_keywords ?? [],
-          }),
-      );
+          });
+      });
   }, [v.analysis_id]);
 
   async function download(type: "pdf" | "latex") {
@@ -121,32 +130,36 @@ export function VersionView({
 
   const step = STEPS.indexOf(v.status);
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold">
-          {v.label || "Tailored resume"}{" "}
-          <span className="text-muted-foreground text-base">
-            v{v.version_number}
-          </span>
-        </h1>
-        <Badge variant={v.status === "failed" ? "destructive" : "secondary"}>
-          {v.status}
-        </Badge>
-      </div>
+    <>
+      <PageHeader
+        title={`${v.label || "Tailored resume"} · v${v.version_number}`}
+        description="Generated only from facts in your original resume."
+        actions={<StatusBadge status={v.status} />}
+      />
 
       {inFlight && (
         <Card>
-          <CardContent className="space-y-2 pt-6" aria-live="polite">
+          <CardContent className="space-y-3" aria-live="polite">
             {STEPS.map((s, i) => (
-              <p
+              <div
                 key={s}
-                className={i <= step ? "font-medium" : "text-muted-foreground"}
+                className={
+                  "flex items-center gap-3 " +
+                  (i > step ? "text-muted-foreground" : "font-medium")
+                }
               >
-                {i < step ? "✓" : i === step ? "…" : "○"} {STEP_LABEL[s]}
-              </p>
+                {i < step ? (
+                  <CheckCircle2 className="text-success size-5" />
+                ) : i === step ? (
+                  <Loader2 className="text-primary size-5 animate-spin" />
+                ) : (
+                  <Circle className="size-5" />
+                )}
+                {STEP_LABEL[s]}
+              </div>
             ))}
             {slow && (
-              <p className="text-sm text-amber-700">
+              <p className="text-warning text-sm">
                 Generation is taking longer than expected. It will keep running;
                 you can leave and come back.
               </p>
@@ -156,16 +169,20 @@ export function VersionView({
       )}
 
       {v.status === "failed" && (
-        <Card>
-          <CardContent className="space-y-3 pt-6">
-            <p role="alert" className="text-destructive text-sm">
+        <Card className="border-destructive/40">
+          <CardContent className="space-y-3">
+            <p
+              role="alert"
+              className="text-destructive flex items-center gap-2 font-medium"
+            >
+              <AlertCircle className="size-5" />{" "}
               {v.error_message ?? "Generation failed."}
             </p>
             <Link
               href={`/resumes/${v.resume_id}/tailor`}
               className={buttonVariants()}
             >
-              Try again
+              <RefreshCw className="size-4" /> Try again
             </Link>
             <p className="text-muted-foreground text-xs">
               Failed attempts don&apos;t count against your free limit.
@@ -175,55 +192,79 @@ export function VersionView({
       )}
 
       {v.status === "ready" && (
-        <>
-          {!!v.validation_result?.warnings?.length && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Validation notes</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1 text-sm">
-                <p className="text-muted-foreground">
-                  Some generated content couldn&apos;t be verified against your
-                  original resume and was removed.
-                </p>
-                <ul className="list-disc pl-5">
-                  {v.validation_result.warnings.map((w, i) => (
-                    <li key={i}>
-                      {w.rule.replace(/_/g, " ")}: {w.detail}
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
-          <div className="flex gap-3">
-            <Button onClick={() => download("pdf")}>Download PDF</Button>
-            <Button variant="outline" onClick={() => download("latex")}>
-              Download LaTeX {plan === "free" && "(Pro)"}
-            </Button>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-4 lg:col-span-2">
+            {pdfUrl ? (
+              <iframe
+                src={pdfUrl}
+                title="Resume PDF preview"
+                className="bg-card h-[80vh] w-full rounded-2xl border shadow-sm"
+              />
+            ) : (
+              <div
+                className="bg-muted h-[80vh] animate-pulse rounded-2xl"
+                aria-label="Loading preview"
+              />
+            )}
           </div>
-          {pdfUrl ? (
-            <iframe
-              src={pdfUrl}
-              title="Resume PDF preview"
-              className="h-[80vh] w-full rounded-md border"
-            />
-          ) : (
-            <p className="text-muted-foreground text-sm">Loading preview…</p>
-          )}
-          {plan === "pro" && v.latex_content && (
+          <div className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>LaTeX source</CardTitle>
+                <CardTitle>Download</CardTitle>
               </CardHeader>
-              <CardContent>
-                <pre className="max-h-96 overflow-auto text-xs">
-                  {v.latex_content}
-                </pre>
+              <CardContent className="space-y-2">
+                <Button
+                  className="w-full"
+                  size="lg"
+                  onClick={() => download("pdf")}
+                >
+                  <Download className="size-4" /> Download PDF
+                </Button>
+                <Button
+                  variant="accent"
+                  className="w-full"
+                  size="lg"
+                  onClick={() => download("latex")}
+                >
+                  <FileCode2 className="size-4" /> Download LaTeX{" "}
+                  {plan === "free" && "(Pro)"}
+                </Button>
               </CardContent>
             </Card>
-          )}
-        </>
+            {!!v.validation_result?.warnings?.length && (
+              <Card className="border-warning/40">
+                <CardHeader>
+                  <CardTitle>Validation notes</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1 text-sm">
+                  <p className="text-muted-foreground">
+                    Some generated content couldn&apos;t be verified against
+                    your original resume and was removed.
+                  </p>
+                  <ul className="list-disc pl-5">
+                    {v.validation_result.warnings.map((w, i) => (
+                      <li key={i}>
+                        {w.rule.replace(/_/g, " ")}: {w.detail}
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+            {plan === "pro" && v.latex_content && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>LaTeX source</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <pre className="bg-muted max-h-72 overflow-auto rounded-xl p-3 text-xs">
+                    {v.latex_content}
+                  </pre>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
       )}
 
       {analysis && (
@@ -241,6 +282,6 @@ export function VersionView({
         onOpenChange={setUpgrade}
         reason="LaTeX download is available on the Pro plan."
       />
-    </div>
+    </>
   );
 }

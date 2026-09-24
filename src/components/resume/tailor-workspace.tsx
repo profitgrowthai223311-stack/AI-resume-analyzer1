@@ -6,9 +6,12 @@ import { UpgradeModal } from "@/components/billing/upgrade-modal";
 import {
   AtsScoreCard,
   KeywordMatchTable,
+  Recommendations,
   type Gap,
   type Hit,
 } from "@/components/resume/ats-results";
+import { Sparkles, Wand2 } from "lucide-react";
+import { Stepper } from "@/components/stepper";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -135,6 +138,14 @@ export function TailorWorkspace({
   return (
     <div className="space-y-6">
       <Card>
+        <CardContent>
+          <Stepper
+            steps={["Job description", "ATS analysis", "Generate"]}
+            current={analysis ? 2 : busy === "analyze" ? 1 : 0}
+          />
+        </CardContent>
+      </Card>
+      <Card>
         <CardHeader>
           <CardTitle>Job description</CardTitle>
           <CardDescription>
@@ -161,7 +172,8 @@ export function TailorWorkspace({
               <Label htmlFor="text">Job description text</Label>
               <Textarea id="text" name="text" className="min-h-48" required />
             </div>
-            <Button type="submit" disabled={busy !== null}>
+            <Button type="submit" disabled={busy !== null} size="lg">
+              <Sparkles className="size-4" />
               {busy === "analyze"
                 ? "Analyzing…"
                 : analysis
@@ -186,11 +198,7 @@ export function TailorWorkspace({
             gaps={analysis.gaps}
             limitGaps={plan === "free" ? 5 : undefined}
           />
-          <ul className="list-disc space-y-1 pl-5 text-sm">
-            {analysis.recommendations.map((r) => (
-              <li key={r}>{r}</li>
-            ))}
-          </ul>
+          <Recommendations items={analysis.recommendations} />
           <Card>
             <CardHeader>
               <CardTitle>Generate tailored resume</CardTitle>
@@ -204,7 +212,8 @@ export function TailorWorkspace({
                 <Label htmlFor="label">Version label</Label>
                 <Input id="label" placeholder="e.g. Frontend Engineer — Acme" />
               </div>
-              <Button onClick={generate} disabled={busy !== null}>
+              <Button onClick={generate} disabled={busy !== null} size="lg">
+                <Wand2 className="size-4" />
                 {busy === "generate" ? "Starting…" : "Generate tailored resume"}
               </Button>
             </CardContent>

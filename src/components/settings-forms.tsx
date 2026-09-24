@@ -34,7 +34,9 @@ export function ProfileForm({
         onChange={(e) => setName(e.target.value)}
         maxLength={100}
       />
-      <Button type="submit">Save</Button>
+      <Button type="submit" variant="success">
+        Save changes
+      </Button>
     </form>
   );
 }

@@ -31,7 +31,10 @@ export function UpgradeModal({
           <li>LaTeX download and full history</li>
           <li>Full keyword gap analysis and priority generation</li>
         </ul>
-        <Link href="/pricing" className={buttonVariants()}>
+        <Link
+          href="/pricing"
+          className={buttonVariants({ size: "lg" }) + " w-full"}
+        >
           See plans
         </Link>
       </DialogContent>

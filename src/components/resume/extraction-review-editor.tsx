@@ -62,7 +62,12 @@ export function ExtractionReviewEditor({
         onChange={(e) => setText(e.target.value)}
         className="min-h-96 font-mono text-sm"
       />
-      <Button onClick={save} disabled={saving || text.trim().length < 50}>
+      <Button
+        onClick={save}
+        disabled={saving || text.trim().length < 50}
+        variant="success"
+        size="lg"
+      >
         {saving ? "Saving…" : "Save text"}
       </Button>
     </div>

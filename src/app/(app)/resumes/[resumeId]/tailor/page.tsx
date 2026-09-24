@@ -1,4 +1,6 @@
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
 import { notFound, redirect } from "next/navigation";
 import { TailorWorkspace } from "@/components/resume/tailor-workspace";
 import { createClient } from "@/lib/supabase/server";
@@ -22,16 +24,21 @@ export default async function TailorPage({
   const plan = await getPlan(supabase, c!.claims.sub);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">
-          Tailor: {resume.display_name}
-        </h1>
-        <Link href={`/resumes/${resumeId}`} className="text-sm underline">
-          Review or edit the resume text first
-        </Link>
-      </div>
+    <>
+      <PageHeader
+        title={`Tailor: ${resume.display_name}`}
+        description="Paste a job description, see how you match, then generate a truthful tailored resume."
+        actions={
+          <Link
+            href={`/resumes/${resumeId}`}
+            className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm underline"
+          >
+            <ArrowLeft className="size-3.5" /> Review or edit the resume text
+            first
+          </Link>
+        }
+      />
       <TailorWorkspace resumeId={resumeId} plan={plan} />
-    </div>
+    </>
   );
 }
