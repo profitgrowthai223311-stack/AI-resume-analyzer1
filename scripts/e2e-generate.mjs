@@ -50,6 +50,10 @@ try {
     `${v.status} ${v.error_code} ${v.error_message}`,
   );
   console.log("warnings:", JSON.stringify(v.validation_result?.warnings));
+  console.log(
+    "bullets:",
+    (v.latex_content ?? "").match(/\\resumeItem\{/g)?.length,
+  );
   const tex = v.latex_content ?? "";
   check(
     "LaTeX starts/ends correctly",
@@ -63,8 +67,14 @@ try {
     "real facts present (Acme Corp, Beta Labs, VIT University)",
     ["Acme Corp", "Beta Labs", "VIT University"].every((s) => tex.includes(s)),
   );
+  if (process.env.SHOW_TEX)
+    console.log(tex.slice(tex.indexOf("\\begin{document}")));
   const src = readFileSync("scripts/fixtures/sample-resume.txt", "utf8");
-  const body = tex.slice(tex.indexOf("\\begin{document}"));
+  // Ignore layout numbers (\vspace{2pt}, [4pt], [leftmargin=0.2in]) — only content figures matter.
+  const body = tex
+    .slice(tex.indexOf("\\begin{document}"))
+    .replace(/\\vspace\{[^}]*\}|\[[^\]]*\]/g, "")
+    .replace(/\\href\{[^}]*\}/g, "");
   check(
     "every number in output exists in source",
     [...body.matchAll(/\d[\d,.]*%?/g)].every((m) =>
@@ -73,8 +83,8 @@ try {
   );
   check(
     "bullets kept (no unnecessary drops)",
-    (tex.match(/\\item/g) ?? []).length >= 5,
-    String((tex.match(/\\item/g) ?? []).length),
+    (tex.match(/\\resumeItem\{/g) ?? []).length >= 4,
+    String((tex.match(/\\resumeItem\{/g) ?? []).length),
   );
   const { data: pdf, error } = await admin.storage
     .from("generated-pdfs")

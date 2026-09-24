@@ -1,15 +1,18 @@
 import "server-only";
 import { logEvent } from "./api-auth";
 import { compilePdf, CompileError } from "./compile";
-import { renderLatex, TEMPLATE_VERSION } from "./latex";
-import { chatJson, MODEL } from "./openai";
-import { GENERATE_SYSTEM_PROMPT, PROMPT_VERSION_GENERATE } from "./prompts";
-import { resumeSchema } from "./resume-schema";
+import { checkLatex, type CheckResult } from "./latex-check";
+import { chatText, MODEL } from "./openai";
+import {
+  GENERATE_SYSTEM_PROMPT,
+  generateUserPrompt,
+  PROMPT_VERSION_GENERATE,
+} from "./prompts";
 import { adminClient } from "./supabase-admin";
-import { enforceFacts, validateLatex } from "./validate";
 
 type Status =
   "queued" | "generating" | "validating" | "compiling" | "ready" | "failed";
+const MAX_ATTEMPTS = 2;
 
 /** Runs the full pipeline for a queued version. Never throws; failures are stored on the row. */
 export async function runGeneration(versionId: string) {
@@ -47,78 +50,49 @@ export async function runGeneration(versionId: string) {
     if (!v || v.status !== "queued") return;
     await setStatus("generating");
 
-    const [{ data: resume }, { data: analysis }, { data: jd }] =
-      await Promise.all([
-        admin
-          .from("resumes")
-          .select("structured_content")
-          .eq("id", v.resume_id)
-          .single(),
-        admin.from("ats_analyses").select("*").eq("id", v.analysis_id).single(),
-        admin
-          .from("job_descriptions")
-          .select("extracted_requirements")
-          .eq("id", v.job_description_id)
-          .single(),
-      ]);
-    const source: string = v.source_snapshot;
-
-    const userPrompt = [
-      `SOURCE RESUME:\n${source}`,
-      `STRUCTURED SECTIONS (best-effort parse):\n${JSON.stringify(resume?.structured_content?.sections ?? {})}`,
-      `JOB DESCRIPTION:\n${v.job_description_snapshot}`,
-      `JOB REQUIREMENTS:\n${JSON.stringify(jd?.extracted_requirements ?? {})}`,
-      `ATS ANALYSIS — matched (evidenced, safe to emphasise): ${JSON.stringify(analysis?.matched_keywords ?? [])}`,
-      `ATS ANALYSIS — related but unproven / unsupported (DO NOT ADD as experience or skills): ${JSON.stringify(
-        (analysis?.missing_keywords ?? []).map(
-          (g: { keyword: string; status: string }) => ({
-            keyword: g.keyword,
-            status: g.status,
-          }),
-        ),
-      )}`,
-    ].join("\n\n");
-
-    const { data: raw, requestId } = await chatJson<unknown>(
-      GENERATE_SYSTEM_PROMPT,
-      userPrompt,
-      0.2,
+    const { data: analysis } = await admin
+      .from("ats_analyses")
+      .select("missing_keywords")
+      .eq("id", v.analysis_id)
+      .single();
+    const unsupported: string[] = (analysis?.missing_keywords ?? []).map(
+      (g: { keyword: string }) => g.keyword,
     );
-    const parsed = resumeSchema.safeParse(raw);
-    if (!parsed.success)
-      return fail(
-        "invalid_model_output",
-        "The AI returned an unexpected format. Please try again.",
-      );
+    const source: string = v.source_snapshot;
+    const basePrompt = generateUserPrompt(
+      source,
+      v.job_description_snapshot,
+      unsupported,
+    );
 
-    await setStatus("validating");
-    let facts;
-    try {
-      facts = enforceFacts(parsed.data, source);
-    } catch {
-      return fail(
-        "fact_check_failed",
-        "We couldn't verify your details against the source resume. Please review your text and retry.",
+    let check: CheckResult | undefined;
+    let requestId: string | undefined;
+    let feedback = "";
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      if (attempt > 1) await setStatus("generating");
+      const res = await chatText(
+        GENERATE_SYSTEM_PROMPT,
+        basePrompt + feedback,
+        0.2,
       );
+      requestId = res.requestId;
+      await setStatus("validating");
+      check = checkLatex(res.text, source);
+      if (check.ok) break;
+      logEvent("latex_validation_failed", {
+        versionId,
+        attempt,
+        errors: check.errors,
+      });
+      feedback = `\n\nYOUR PREVIOUS OUTPUT FAILED VALIDATION (${check.errors.join("; ")}). Output the complete corrected LaTeX again. Copy the preamble exactly, escape special characters, and use only facts, names, dates and figures from the ORIGINAL RESUME.`;
     }
-    if (
-      !facts.resume.experience.length &&
-      !facts.resume.projects.length &&
-      !facts.resume.education.length
-    )
-      return fail(
-        "insufficient_source_content",
-        "There wasn't enough verifiable content to build a resume. Add more detail to your source text.",
-      );
-
-    const tex = renderLatex(facts.resume);
-    const validation = validateLatex(tex);
-    if (!validation.ok)
+    if (!check?.ok)
       return fail(
         "latex_validation_failed",
-        `LaTeX validation failed: ${validation.errors.join(", ")}`,
+        `The generated resume failed validation (${check?.errors.slice(0, 3).join(", ")}). Please try again.`,
       );
 
+    const tex = check.tex;
     const base = `${v.user_id}/${v.resume_id}/${v.id}`;
     const texUp = await admin.storage
       .from("generated-latex")
@@ -132,11 +106,10 @@ export async function runGeneration(versionId: string) {
     await setStatus("compiling", {
       latex_content: tex,
       latex_storage_path: `${base}/resume.tex`,
-      validation_result: { ok: true, warnings: facts.warnings },
+      validation_result: { ok: true, warnings: check.warnings },
       generation_metadata: {
         model: MODEL,
         promptVersion: PROMPT_VERSION_GENERATE,
-        template: TEMPLATE_VERSION,
         requestId,
         temperature: 0.2,
       },
@@ -173,7 +146,7 @@ export async function runGeneration(versionId: string) {
     logEvent("generation_complete", {
       versionId,
       ms: Date.now() - started,
-      warnings: facts.warnings.length,
+      warnings: check.warnings.length,
     });
   } catch (e) {
     logEvent("generation_crashed", { versionId, reason: (e as Error).message });

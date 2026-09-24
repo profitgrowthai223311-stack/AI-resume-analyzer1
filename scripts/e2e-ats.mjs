@@ -45,7 +45,9 @@ try {
   ]);
   check(
     "CI/CD, GraphQL, Cypress not matched",
-    ["ci/cd", "graphql", "cypress"].every((k) => notMatched.includes(k)),
+    ["ci/cd", "graphql", "cypress"].every((k) =>
+      notMatched.some((n) => n.includes(k)),
+    ),
   );
   check(
     "AWS certification never matched",

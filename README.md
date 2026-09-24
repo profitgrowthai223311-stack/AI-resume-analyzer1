@@ -35,13 +35,17 @@ Razorpay: create the webhook at `<site>/api/razorpay-webhook` (events: `subscrip
 | Signed downloads (LaTeX = Pro)                     | `GET /api/download`                                                         |
 | Deletion                                           | `DELETE /api/account`                                                       |
 
-### Anti-fabrication design
-
-The model returns **structured JSON**, each bullet with a verbatim `evidence` quote from the source resume.
-`enforceFacts` removes anything it cannot trace (unknown employers/schools/certs/skills, invented metrics, bad
-dates, unsupported bullets) and records a visible warning. LaTeX is then **rendered by our own template** (all text
-escaped), so the output is always well-formed, on an allow-list of packages, and free of dangerous commands.
-`validateLatex` re-checks the final document before compiling.
+### Prompts and anti-fabrication design
+Both AI steps use the owner-supplied system prompts verbatim (`src/lib/server/prompts.ts`): the ATS analyzer (JSON output)
+and the LaTeX resume writer. The resume prompt demands exactly 8 bullets with real metrics per company, extra JD tools
+and the JD's city, which would force fabrication, so a **TRUTHFULNESS OVERRIDE** block is appended that supersedes
+those rules (per PRD section 12). The model's output is then checked by `checkLatex`:
+- structure: starts/ends correctly, no fences, preamble identical to the template, allow-listed commands/environments only,
+  balanced environments, sections in order, escaped special characters, https/mailto links that exist in the resume;
+- facts: name, email, phone, location, employers, titles, dates, schools, degrees and project names must appear in the
+  resume; unsupported bullets (invented figures), skills and certifications are removed and reported as warnings;
+- one automatic retry with the failure reasons; otherwise the version fails with a safe message and is not charged.
+ATS "matched" skills are verified against the resume text; unverified ones are shown as "related but unproven".
 
 ### Deviation from the PRD
 
@@ -54,10 +58,10 @@ Generation runs in the background via `after()` and the client polls the version
 ## Tests (need `.env.local` and a running server)
 
 ```bash
-npm run test:guardrails                      # unit: fact + LaTeX validators (no server)
+npm run test:guardrails                      # unit: LaTeX validator + fact checks (no server)
 ./scripts/dev-test-server.sh                 # build + start on :3111
 npm run test:rls && npm run test:extract && npm run test:ats \
-  && npm run test:generate && npm run test:billing && npm run test:pages
+  && npm run test:generate && npm run test:adversarial && npm run test:billing && npm run test:pages
 ```
 
 The e2e scripts create temporary users in the configured Supabase project and delete them afterwards.
@@ -76,4 +80,4 @@ The e2e scripts create temporary users in the configured Supabase project and de
 - Rate limiting is in-memory per instance; use a shared store (e.g. Upstash) for multi-instance production.
 - Free-plan **upload** cap (2) is not enforced yet; generation quota is.
 - `SUPABASE_DB_URL` is for CLI migrations only; the app never uses it.
-- The course's strict LaTeX system prompt was not provided; `src/lib/server/prompts.ts` holds our own versioned prompt.
+- `prompts.ts` holds the owner-supplied prompts plus the truthfulness override; bump the version constants when editing.

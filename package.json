@@ -15,6 +15,7 @@
     "test:guardrails": "tsx --conditions=react-server scripts/test-guardrails.ts",
     "test:billing": "node scripts/e2e-billing.mjs",
     "test:pages": "node scripts/e2e-pages.mjs",
+    "test:adversarial": "node scripts/e2e-adversarial.mjs",
     "format": "prettier --write .",
     "typecheck": "next typegen && tsc --noEmit"
   },

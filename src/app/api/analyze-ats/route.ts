@@ -36,6 +36,8 @@ export async function POST(request: Request) {
         .filter((g) => g.status === "unsupported")
         .map((g) => g.keyword),
       recommendations: r.recommendations,
+      matchLevel: r.report.match_level,
+      summary: r.report.summary,
     });
   } catch (e) {
     if (e instanceof ServiceError) return json({ error: e.code }, e.status);

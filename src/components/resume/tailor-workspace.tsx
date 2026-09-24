@@ -5,8 +5,10 @@ import { useState } from "react";
 import { UpgradeModal } from "@/components/billing/upgrade-modal";
 import {
   AtsScoreCard,
+  AnalysisReport,
   KeywordMatchTable,
   Recommendations,
+  type Report,
   type Gap,
   type Hit,
 } from "@/components/resume/ats-results";
@@ -31,6 +33,7 @@ type Analysis = {
   matched: Hit[];
   gaps: Gap[];
   recommendations: string[];
+  report?: Report;
 };
 
 export function TailorWorkspace({
@@ -86,7 +89,7 @@ export function TailorWorkspace({
       const { data: a } = await supabase
         .from("ats_analyses")
         .select(
-          "id, score, matched_keywords, missing_keywords, recommendations",
+          "id, score, matched_keywords, missing_keywords, recommendations, model_metadata",
         )
         .eq("id", analysisId)
         .single();
@@ -97,6 +100,7 @@ export function TailorWorkspace({
           matched: a.matched_keywords ?? [],
           gaps: a.missing_keywords ?? [],
           recommendations: a.recommendations ?? [],
+          report: a.model_metadata?.report,
         });
     } finally {
       setBusy(null);
@@ -192,7 +196,8 @@ export function TailorWorkspace({
 
       {analysis && (
         <>
-          <AtsScoreCard score={analysis.score} />
+          <AtsScoreCard score={analysis.score} report={analysis.report} />
+          <AnalysisReport report={analysis.report} />
           <KeywordMatchTable
             matched={analysis.matched}
             gaps={analysis.gaps}

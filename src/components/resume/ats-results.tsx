@@ -18,9 +18,24 @@ export type Gap = {
   note?: string;
 };
 
-export function AtsScoreCard({ score }: { score: number }) {
-  const verdict =
-    score >= 70
+export type Report = {
+  match_level?: string;
+  summary?: string;
+  experience_summary?: string;
+  strengths?: string[];
+  gaps?: string[];
+};
+
+export function AtsScoreCard({
+  score,
+  report,
+}: {
+  score: number;
+  report?: Report;
+}) {
+  const verdict = report?.match_level
+    ? `${report.match_level} match`
+    : score >= 70
       ? "Strong alignment"
       : score >= 40
         ? "Partial alignment"
@@ -40,6 +55,7 @@ export function AtsScoreCard({ score }: { score: number }) {
             An advisory estimate of how many of the job&apos;s keywords your
             resume evidences. It is not a hiring guarantee.
           </CardDescription>
+          {report?.summary && <p className="pt-1 text-sm">{report.summary}</p>}
         </div>
       </CardContent>
     </Card>
@@ -142,5 +158,57 @@ export function Recommendations({ items }: { items: string[] }) {
         </ul>
       </CardContent>
     </Card>
+  );
+}
+
+export function AnalysisReport({ report }: { report?: Report }) {
+  if (
+    !report ||
+    (!report.strengths?.length &&
+      !report.gaps?.length &&
+      !report.experience_summary)
+  )
+    return null;
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      {!!report.strengths?.length && (
+        <Card className="border-success/30">
+          <CardHeader>
+            <CardTitle>Strengths</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc space-y-1 pl-5 text-sm">
+              {report.strengths.map((x) => (
+                <li key={x}>{x}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+      {!!report.gaps?.length && (
+        <Card className="border-warning/40">
+          <CardHeader>
+            <CardTitle>Areas to improve</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc space-y-1 pl-5 text-sm">
+              {report.gaps.map((x) => (
+                <li key={x}>{x}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+      {report.experience_summary && (
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle>Experience match</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm">
+            {report.experience_summary}
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }

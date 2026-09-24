@@ -29,3 +29,22 @@ export async function chatJson<T>(
   if (!content) throw new Error("empty_model_response");
   return { data: JSON.parse(content) as T, requestId: res.id };
 }
+
+/** Plain-text completion (used for raw LaTeX output). Content is never logged. */
+export async function chatText(
+  system: string,
+  user: string,
+  temperature = 0.2,
+): Promise<{ text: string; requestId?: string }> {
+  const res = await openai().chat.completions.create({
+    model: MODEL,
+    temperature,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  });
+  const text = res.choices[0]?.message?.content;
+  if (!text) throw new Error("empty_model_response");
+  return { text, requestId: res.id };
+}

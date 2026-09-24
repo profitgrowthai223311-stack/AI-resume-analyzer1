@@ -14,10 +14,12 @@ import { useCallback, useEffect, useState } from "react";
 import { UpgradeModal } from "@/components/billing/upgrade-modal";
 import { PageHeader } from "@/components/page-header";
 import {
+  AnalysisReport,
   AtsScoreCard,
   KeywordMatchTable,
   type Gap,
   type Hit,
+  type Report,
 } from "@/components/resume/ats-results";
 import { StatusBadge } from "@/components/status-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -57,6 +59,7 @@ export function VersionView({
     score: number;
     matched: Hit[];
     gaps: Gap[];
+    report?: Report;
   }>();
   const [upgrade, setUpgrade] = useState(false);
   const [slow, setSlow] = useState(false);
@@ -109,7 +112,7 @@ export function VersionView({
     if (!v.analysis_id) return;
     createClient()
       .from("ats_analyses")
-      .select("score, matched_keywords, missing_keywords")
+      .select("score, matched_keywords, missing_keywords, model_metadata")
       .eq("id", v.analysis_id)
       .single()
       .then(({ data }) => {
@@ -118,6 +121,7 @@ export function VersionView({
             score: data.score,
             matched: data.matched_keywords ?? [],
             gaps: data.missing_keywords ?? [],
+            report: data.model_metadata?.report,
           });
       });
   }, [v.analysis_id]);
@@ -269,7 +273,8 @@ export function VersionView({
 
       {analysis && (
         <>
-          <AtsScoreCard score={analysis.score} />
+          <AtsScoreCard score={analysis.score} report={analysis.report} />
+          <AnalysisReport report={analysis.report} />
           <KeywordMatchTable
             matched={analysis.matched}
             gaps={analysis.gaps}

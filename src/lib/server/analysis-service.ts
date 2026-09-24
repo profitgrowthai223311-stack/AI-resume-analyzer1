@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { analyze, extractRequirements } from "./ats";
+import { analyze } from "./ats";
 import { logEvent } from "./api-auth";
 import { adminClient } from "./supabase-admin";
 
@@ -39,19 +39,11 @@ export async function runAnalysis(
   const started = Date.now();
   try {
     const admin = adminClient();
-    // Reuse cached requirements unless the JD text changed since they were extracted.
-    let requirements = jd.extracted_requirements;
-    if (!requirements || jd.normalized_text !== jd.raw_text.trim()) {
-      requirements = (await extractRequirements(jd.raw_text)).requirements;
-      await admin
-        .from("job_descriptions")
-        .update({
-          extracted_requirements: requirements,
-          normalized_text: jd.raw_text.trim(),
-        })
-        .eq("id", jd.id);
-    }
-    const result = await analyze(resume.extracted_text, requirements);
+    const result = await analyze(resume.extracted_text, jd.raw_text);
+    await admin
+      .from("job_descriptions")
+      .update({ normalized_text: jd.raw_text.trim() })
+      .eq("id", jd.id);
     const { data: row, error } = await admin
       .from("ats_analyses")
       .insert({
@@ -67,7 +59,7 @@ export async function runAnalysis(
           allowed: true,
         })),
         recommendations: result.recommendations,
-        model_metadata: result.metadata,
+        model_metadata: { ...result.metadata, report: result.report },
       })
       .select("id")
       .single();
