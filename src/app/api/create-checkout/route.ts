@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PRO_PLANS, razorpayPlanId } from "@/lib/plans";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { getAuthed, json, logEvent, unauthorized } from "@/lib/server/api-auth";
 import { getPlan } from "@/lib/server/plan";
 import { razorpay } from "@/lib/server/razorpay";
@@ -8,6 +9,8 @@ import { adminClient } from "@/lib/server/supabase-admin";
 export async function POST(request: Request) {
   const auth = await getAuthed(request);
   if (!auth) return unauthorized();
+  if (!rateLimit(`checkout:${auth.user.id}`, 5, 60_000))
+    return json({ error: "rate_limited" }, 429);
   const body = z
     .object({ plan: z.enum(["monthly", "yearly"]) })
     .safeParse(await request.json().catch(() => null));
@@ -27,17 +30,15 @@ export async function POST(request: Request) {
       notes: { user_id: auth.user.id, plan: body.data.plan },
     });
     // Stays inactive until a verified webhook says otherwise; the client is never trusted.
-    await admin
-      .from("subscriptions")
-      .upsert(
-        {
-          user_id: auth.user.id,
-          plan_code: body.data.plan,
-          status: "inactive",
-          razorpay_subscription_id: sub.id,
-        },
-        { onConflict: "user_id" },
-      );
+    await admin.from("subscriptions").upsert(
+      {
+        user_id: auth.user.id,
+        plan_code: body.data.plan,
+        status: "inactive",
+        razorpay_subscription_id: sub.id,
+      },
+      { onConflict: "user_id" },
+    );
     logEvent("checkout_started", { plan: body.data.plan });
     return json({
       subscriptionId: sub.id,

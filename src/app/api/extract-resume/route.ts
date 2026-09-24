@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { getAuthed, json, logEvent, unauthorized } from "@/lib/server/api-auth";
 import {
   PARSER_NAME,
@@ -11,6 +12,8 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const auth = await getAuthed(request);
   if (!auth) return unauthorized();
+  if (!rateLimit(`extract:${auth.user.id}`, 10, 60_000))
+    return json({ error: "rate_limited" }, 429);
   const body = z
     .object({ resumeId: z.string().uuid() })
     .safeParse(await request.json().catch(() => null));

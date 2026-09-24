@@ -52,13 +52,11 @@ export async function POST(request: Request) {
   const eventId =
     request.headers.get("x-razorpay-event-id") ??
     `${event.event}:${event.payload?.subscription?.entity?.id}:${event.payload?.subscription?.entity?.current_end}`;
-  const { error: insertError } = await admin
-    .from("payment_events")
-    .insert({
-      provider_event_id: eventId,
-      event_type: event.event,
-      payload: event,
-    });
+  const { error: insertError } = await admin.from("payment_events").insert({
+    provider_event_id: eventId,
+    event_type: event.event,
+    payload: event,
+  });
   if (insertError) {
     if (insertError.code === "23505")
       return json({ ok: true, duplicate: true });

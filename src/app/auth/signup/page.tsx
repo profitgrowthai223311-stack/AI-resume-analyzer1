@@ -35,6 +35,13 @@ export default function SignupPage() {
           },
         ]}
       />
+      <p className="text-muted-foreground text-xs">
+        By signing up you agree to our{" "}
+        <Link href="/privacy" className="underline">
+          privacy and AI data handling
+        </Link>{" "}
+        terms.
+      </p>
       <p className="text-sm">
         Already have an account?{" "}
         <Link href="/auth/login" className="underline">

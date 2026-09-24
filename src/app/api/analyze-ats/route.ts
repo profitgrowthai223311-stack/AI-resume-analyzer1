@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { getAuthed, json, unauthorized } from "@/lib/server/api-auth";
 import { runAnalysis, ServiceError } from "@/lib/server/analysis-service";
 
@@ -7,6 +8,8 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const auth = await getAuthed(request);
   if (!auth) return unauthorized();
+  if (!rateLimit(`analyze:${auth.user.id}`, 15, 60_000))
+    return json({ error: "rate_limited" }, 429);
   const body = z
     .object({
       resumeId: z.string().uuid(),

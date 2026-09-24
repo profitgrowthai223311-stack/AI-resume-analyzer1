@@ -17,6 +17,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           <Link href="/dashboard" className="font-semibold">
             AI Resume Analyzer
           </Link>
+          <Link href="/resumes/new">New resume</Link>
           <Link href="/history">History</Link>
           <Link href="/billing">Billing</Link>
           <Link href="/settings">Settings</Link>

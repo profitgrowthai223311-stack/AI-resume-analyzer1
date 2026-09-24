@@ -1,0 +1,14 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Netlify's OpenNext runtime is applied automatically for Next.js sites.
+# Set env vars in Site settings → Environment variables (mark server secrets as secret):
+#   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_SITE_URL,
+#   NEXT_PUBLIC_RAZORPAY_KEY_ID, NEXT_PUBLIC_MAX_UPLOAD_MB   (public)
+#   SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY, OPENAI_MODEL, RAZORPAY_KEY_SECRET,
+#   RAZORPAY_WEBHOOK_SECRET, RAZORPAY_PLAN_ID_MONTHLY, RAZORPAY_PLAN_ID_YEARLY,
+#   LATEX_COMPILER_URL, FREE_MONTHLY_GENERATIONS, MAX_UPLOAD_MB                (server-only)

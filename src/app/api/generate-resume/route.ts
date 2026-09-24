@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { z } from "zod";
+import { rateLimit } from "@/lib/server/rate-limit";
 import { getAuthed, json, logEvent, unauthorized } from "@/lib/server/api-auth";
 import { runAnalysis, ServiceError } from "@/lib/server/analysis-service";
 import { runGeneration } from "@/lib/server/generate";
@@ -15,6 +16,8 @@ export const maxDuration = 300;
 export async function POST(request: Request) {
   const auth = await getAuthed(request);
   if (!auth) return unauthorized();
+  if (!rateLimit(`generate:${auth.user.id}`, 10, 60_000))
+    return json({ error: "rate_limited" }, 429);
   const body = z
     .object({
       resumeId: z.string().uuid(),
