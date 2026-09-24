@@ -16,8 +16,22 @@ const phaseArg = process.argv.find((a) => a.startsWith("--phase="));
 const phase = phaseArg ? Number(phaseArg.split("=")[1]) : 1;
 
 const groups = [
-  { phase: 1, vars: ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_SITE_URL"] },
-  { phase: 2, vars: ["SUPABASE_SERVICE_ROLE_KEY", "MAX_UPLOAD_MB", "FREE_MONTHLY_GENERATIONS"] },
+  {
+    phase: 1,
+    vars: [
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "NEXT_PUBLIC_SITE_URL",
+    ],
+  },
+  {
+    phase: 2,
+    vars: [
+      "SUPABASE_SERVICE_ROLE_KEY",
+      "MAX_UPLOAD_MB",
+      "FREE_MONTHLY_GENERATIONS",
+    ],
+  },
   { phase: 5, vars: ["OPENAI_API_KEY", "OPENAI_MODEL"] },
   { phase: 6, vars: ["LATEX_COMPILER_URL"] },
   {
@@ -40,7 +54,16 @@ for (const g of groups.filter((g) => g.phase <= phase)) {
     console.log(`${ok ? "✓" : "✗"} ${v}  (phase ${g.phase})`);
   }
 }
-if (env.NEXT_PUBLIC_SUPABASE_URL && !/^https:\/\/.+\.supabase\.co\/?$/.test(env.NEXT_PUBLIC_SUPABASE_URL))
-  console.log("! NEXT_PUBLIC_SUPABASE_URL does not look like https://<ref>.supabase.co");
-console.log(missing ? `\n${missing} missing for phases ≤ ${phase}` : `\nAll set for phases ≤ ${phase}`);
+if (
+  env.NEXT_PUBLIC_SUPABASE_URL &&
+  !/^https:\/\/.+\.supabase\.co\/?$/.test(env.NEXT_PUBLIC_SUPABASE_URL)
+)
+  console.log(
+    "! NEXT_PUBLIC_SUPABASE_URL does not look like https://<ref>.supabase.co",
+  );
+console.log(
+  missing
+    ? `\n${missing} missing for phases ≤ ${phase}`
+    : `\nAll set for phases ≤ ${phase}`,
+);
 process.exit(missing ? 1 : 0);

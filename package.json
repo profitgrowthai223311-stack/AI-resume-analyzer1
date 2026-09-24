@@ -9,7 +9,11 @@
     "lint": "eslint",
     "check-env": "node scripts/check-env.mjs",
     "test:rls": "node scripts/e2e-rls.mjs",
-    "test:extract": "node scripts/e2e-extract.mjs", "format": "prettier --write .",
+    "test:extract": "node scripts/e2e-extract.mjs",
+    "test:ats": "node scripts/e2e-ats.mjs",
+    "test:generate": "node scripts/e2e-generate.mjs",
+    "test:guardrails": "tsx --conditions=react-server scripts/test-guardrails.ts",
+    "format": "prettier --write .",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
@@ -43,6 +47,7 @@
     "prettier-plugin-tailwindcss": "^0.8.1",
     "supabase": "^2.117.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
