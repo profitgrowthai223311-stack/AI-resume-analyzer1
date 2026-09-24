@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "format": "prettier --write .",
+    "check-env": "node scripts/check-env.mjs", "format": "prettier --write .",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
