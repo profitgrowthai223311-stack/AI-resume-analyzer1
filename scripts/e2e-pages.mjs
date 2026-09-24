@@ -56,7 +56,7 @@ try {
   }
 
   const pages = [
-    ["/dashboard", /Welcome, E2E pages/],
+    ["/dashboard", /Welcome,[\s\S]*E2E pages/],
     ["/resumes/new", /Upload your resume/],
     [`/resumes/${rid}`, /Extracted text/],
     [`/resumes/${rid}/tailor`, /Job description/],

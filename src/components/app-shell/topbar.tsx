@@ -35,10 +35,13 @@ export function Topbar({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const title =
-    PAGE_TITLES.find(
-      ([p]) => pathname === p || pathname.startsWith(p + "/"),
-    )?.[1] ?? "";
+  const title = pathname.endsWith("/tailor")
+    ? "Tailor resume"
+    : /^\/resumes\/(?!new)[^/]+$/.test(pathname)
+      ? "Resume"
+      : (PAGE_TITLES.find(
+          ([p]) => pathname === p || pathname.startsWith(p + "/"),
+        )?.[1] ?? "");
   const initials = (name || email)
     .split(/[\s@.]+/)
     .filter(Boolean)
