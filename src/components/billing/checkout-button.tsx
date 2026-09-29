@@ -3,13 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
 
 declare global {
   interface Window {
     Razorpay?: new (opts: Record<string, unknown>) => { open: () => void };
   }
 }
+
+type CheckoutSuccess = {
+  razorpay_payment_id: string;
+  razorpay_subscription_id: string;
+  razorpay_signature: string;
+};
 
 function loadCheckout() {
   return new Promise<boolean>((resolve) => {
@@ -32,7 +37,7 @@ export function CheckoutButton({
   signedIn: boolean;
 }) {
   const router = useRouter();
-  const [state, setState] = useState<"idle" | "loading" | "processing">("idle");
+  const [state, setState] = useState<"idle" | "loading" | "verifying">("idle");
   const [error, setError] = useState<string>();
 
   async function start() {
@@ -62,31 +67,34 @@ export function CheckoutButton({
       subscription_id: subscriptionId,
       name: "AI Resume Analyzer",
       description: "Pro subscription",
-      handler: () => waitForActivation(),
+      handler: (response: CheckoutSuccess) => confirm(response),
       modal: { ondismiss: () => setState("idle") },
     }).open();
   }
 
-  // The checkout result is not trusted. Wait for the verified webhook to activate the plan.
-  async function waitForActivation() {
-    setState("processing");
-    const supabase = createClient();
-    for (let i = 0; i < 30; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
-      const { data } = await supabase
-        .from("subscriptions")
-        .select("status")
-        .maybeSingle();
-      if (data?.status === "active") return router.push("/billing?upgraded=1");
+  // Razorpay hands the browser a payment id, subscription id and a signature it alone could have
+  // produced (HMAC with our key secret). We verify that signature server-side and activate Pro
+  // immediately — this is real cryptographic proof, not a client claim. If the immediate check
+  // can't complete for some reason, the verified webhook activates the plan shortly after.
+  async function confirm(response: CheckoutSuccess) {
+    setState("verifying");
+    try {
+      const res = await fetch("/api/verify-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(response),
+      });
+      router.push(res.ok ? "/billing?upgraded=1" : "/billing?processing=1");
+    } catch {
+      router.push("/billing?processing=1");
     }
-    router.push("/billing");
   }
 
   return (
     <div className="space-y-2">
       <Button onClick={start} disabled={state !== "idle"}>
-        {state === "processing"
-          ? "Payment processing…"
+        {state === "verifying"
+          ? "Confirming payment…"
           : state === "loading"
             ? "Opening…"
             : label}

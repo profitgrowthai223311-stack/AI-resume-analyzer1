@@ -1,7 +1,7 @@
 import "server-only";
 import OpenAI from "openai";
 
-export const MODEL = process.env.OPENAI_MODEL || "gpt-4o";
+export const MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 let client: OpenAI | undefined;
 const openai = () =>
   (client ??= new OpenAI({

@@ -22,18 +22,21 @@ Razorpay: create the webhook at `<site>/api/razorpay-webhook` (events: `subscrip
 
 ## How it works
 
-| Step                                               | Where                                                                       |
-| -------------------------------------------------- | --------------------------------------------------------------------------- |
-| Upload + validation (extension, size, magic bytes) | `src/components/resume/resume-uploader.tsx`                                 |
-| Text extraction (unpdf / mammoth)                  | `POST /api/extract-resume`                                                  |
-| JD requirements + ATS score + evidence map         | `POST /api/analyze-ats`                                                     |
-| Generation pipeline                                | `POST /api/generate-resume` → `src/lib/server/generate.ts`                  |
-| Fact enforcement + LaTeX validation                | `src/lib/server/validate.ts`                                                |
-| Deterministic LaTeX template                       | `src/lib/server/latex.ts`                                                   |
-| PDF compile (multipart `pdflatex`)                 | `src/lib/server/compile.ts`                                                 |
-| Billing                                            | `/api/create-checkout`, `/api/razorpay-webhook`, `/api/cancel-subscription` |
-| Signed downloads (LaTeX = Pro)                     | `GET /api/download`                                                         |
-| Deletion                                           | `DELETE /api/account`                                                       |
+| Step                                                | Where                                                                                            |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Upload + validation (extension, size, magic bytes)   | `src/components/resume/resume-uploader.tsx`                                                      |
+| Text extraction (unpdf / mammoth)                    | `POST /api/extract-resume`                                                                       |
+| JD requirements + ATS score + evidence map           | `POST /api/analyze-ats` → `src/lib/server/ats.ts`                                                |
+| Generation pipeline                                  | `POST /api/generate-resume` → `src/lib/server/generate.ts`                                       |
+| System prompts (owner-supplied)                      | `src/lib/server/prompts.ts`                                                                      |
+| LaTeX validation + fact enforcement + sanitizing     | `src/lib/server/latex-check.ts`                                                                  |
+| PDF compile (multipart `pdflatex`)                   | `src/lib/server/compile.ts`                                                                      |
+| Checkout + subscription creation                     | `POST /api/create-checkout`                                                                      |
+| Payment confirmation (browser, signature-verified)   | `POST /api/verify-payment`                                                                       |
+| Payment confirmation (webhook, reconciliation)        | `POST /api/razorpay-webhook`                                                                      |
+| Cancel subscription                                  | `POST /api/cancel-subscription`                                                                  |
+| Signed downloads (LaTeX = Pro)                       | `GET /api/download`                                                                              |
+| Deletion                                             | `DELETE /api/account`, `DELETE /api/resumes/[resumeId]`                                          |
 
 ### Prompts and anti-fabrication design
 Both AI steps use the owner-supplied system prompts verbatim (`src/lib/server/prompts.ts`): the ATS analyzer (JSON output)
@@ -46,6 +49,30 @@ those rules (per PRD section 12). The model's output is then checked by `checkLa
   resume; unsupported bullets (invented figures), skills and certifications are removed and reported as warnings;
 - one automatic retry with the failure reasons; otherwise the version fails with a safe message and is not charged.
 ATS "matched" skills are verified against the resume text; unverified ones are shown as "related but unproven".
+
+### Payment confirmation: browser-verified, not webhook-only
+
+Checkout uses Razorpay subscriptions. On success, Checkout.js hands the browser a payment id, subscription id and a
+**signature** — an HMAC-SHA256 of `payment_id|subscription_id` that only Razorpay's servers can produce with our key
+secret. `POST /api/verify-payment` (`src/app/api/verify-payment/route.ts`) verifies that signature server-side, then
+re-fetches the payment and subscription from Razorpay's API before activating Pro. This is the same trust model as
+the webhook (a cryptographic proof, not a client claim) but resolves instantly on the checkout redirect instead of
+waiting for an async webhook delivery. It is idempotent (shares the `payment_events` table/uniqueness with the
+webhook) and rate-limited; a transient failure (e.g. Razorpay briefly unreachable) is retried rather than treated as
+a false success. The **webhook stays in place** as the durable reconciliation path — it is what the PRD requires for
+delayed events, renewals, halts and cancellations, and it re-activates a subscription even if the browser tab closed
+before `/api/verify-payment` ran. Live security checks: `npm run test:verify-payment` (forged/wrong-secret signatures
+rejected, cross-user ownership enforced, a merely well-formed-but-fake payment id never activates anything).
+
+A full automated browser test (real Razorpay Checkout UI + test card `4111 1111 1111 1111`) was attempted with
+Puppeteer; Razorpay's checkout responded to the headless browser by loading an hCaptcha/bot-detection challenge, which
+was not bypassed. The endpoint's logic is instead verified directly against the live Razorpay API (above). Recommend
+a manual click-through with a test card before going live.
+
+### AI model
+
+`OPENAI_MODEL` defaults to `gpt-4.1-mini` for both the ATS analysis and the resume-generation steps. Override it in
+`.env.local` to use a different model.
 
 ### Deviation from the PRD
 
@@ -61,7 +88,8 @@ Generation runs in the background via `after()` and the client polls the version
 npm run test:guardrails                      # unit: LaTeX validator + fact checks (no server)
 ./scripts/dev-test-server.sh                 # build + start on :3111
 npm run test:rls && npm run test:extract && npm run test:ats \
-  && npm run test:generate && npm run test:adversarial && npm run test:billing && npm run test:pages
+  && npm run test:generate && npm run test:adversarial && npm run test:verify-payment \
+  && npm run test:billing && npm run test:pages
 ```
 
 The e2e scripts create temporary users in the configured Supabase project and delete them afterwards.

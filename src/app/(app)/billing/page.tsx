@@ -53,6 +53,12 @@ export default async function BillingPage({
           Payment received. Welcome to Pro!
         </p>
       )}
+      {sp.processing && plan !== "pro" && (
+        <p className="bg-warning/15 text-warning rounded-xl px-4 py-3 text-sm font-medium">
+          Your payment is being confirmed. This can take a minute — refresh this
+          page shortly.
+        </p>
+      )}
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="overflow-hidden pt-0 lg:col-span-2">
           <div
