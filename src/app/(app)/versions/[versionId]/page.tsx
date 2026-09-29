@@ -14,7 +14,7 @@ export default async function VersionPage({
   const { data: v } = await supabase
     .from("resume_versions")
     .select(
-      "id, label, version_number, status, error_message, latex_content, validation_result, analysis_id, resume_id",
+      "id, label, version_number, status, error_message, latex_content, validation_result, analysis_id, resume_id, job_description_id",
     )
     .eq("id", versionId)
     .maybeSingle();

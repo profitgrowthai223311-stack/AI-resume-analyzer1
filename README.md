@@ -52,6 +52,17 @@ those rules (per PRD section 12). The model's output is then checked by `checkLa
 - one automatic retry with the failure reasons; otherwise the version fails with a safe message and is not charged.
   ATS "matched" skills are verified against the resume text; unverified ones are shown as "related but unproven".
 
+If a version does fail, its raw LaTeX and validation errors/warnings are saved to that row (never shown to the user —
+the failed-status UI branch doesn't render them) so a recurrence can be diagnosed from the database directly instead
+of needing to be reproduced live.
+
+**Retrying a failed version** (the "Try again" button on `/versions/[versionId]`) calls `POST /api/generate-resume`
+again with the _same_ `resumeId` and `jobDescriptionId` the failed version used — the user doesn't re-paste the job
+description or redo the analysis, and the existing `ats_analyses` row for that resume/JD pair is reused rather than
+re-run. It's a normal generation call in every other respect: still subject to the free quota, still rate-limited,
+still blocked if a generation is already in progress. If the job description was since deleted (nullable FK), the
+button falls back to a link to the tailor page instead of a broken retry. Live test: `npm run test:retry`.
+
 ### Payment confirmation: browser-verified, not webhook-only
 
 Checkout uses Razorpay subscriptions. On success, Checkout.js hands the browser a payment id, subscription id and a
@@ -138,7 +149,7 @@ npm run test:guardrails                      # unit: LaTeX validator + fact chec
 ./scripts/dev-test-server.sh                 # build + start on :3111
 npm run test:rls && npm run test:extract && npm run test:ats \
   && npm run test:generate && npm run test:adversarial && npm run test:verify-payment \
-  && npm run test:upload-limit && npm run test:billing && npm run test:pages
+  && npm run test:upload-limit && npm run test:retry && npm run test:billing && npm run test:pages
 ```
 
 The e2e scripts create temporary users in the configured Supabase project and delete them afterwards.

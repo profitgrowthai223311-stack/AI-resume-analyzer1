@@ -18,6 +18,7 @@
     "test:adversarial": "node scripts/e2e-adversarial.mjs",
     "test:verify-payment": "node scripts/e2e-verify-payment.mjs",
     "test:upload-limit": "node scripts/e2e-upload-limit.mjs",
+    "test:retry": "node scripts/e2e-retry.mjs",
     "format": "prettier --write .",
     "typecheck": "next typegen && tsc --noEmit"
   },

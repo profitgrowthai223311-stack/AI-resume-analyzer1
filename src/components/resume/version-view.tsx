@@ -10,6 +10,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { UpgradeModal } from "@/components/billing/upgrade-modal";
 import { PageHeader } from "@/components/page-header";
@@ -36,6 +37,7 @@ type Version = {
   validation_result: { warnings?: { rule: string; detail: string }[] } | null;
   analysis_id: string | null;
   resume_id: string;
+  job_description_id: string | null;
 };
 const STEPS = ["queued", "generating", "validating", "compiling", "ready"];
 const STEP_LABEL: Record<string, string> = {
@@ -53,6 +55,7 @@ export function VersionView({
   initial: Version;
   plan: "free" | "pro";
 }) {
+  const router = useRouter();
   const [v, setV] = useState(initial);
   const [pdfUrl, setPdfUrl] = useState<string>();
   const [analysis, setAnalysis] = useState<{
@@ -61,8 +64,10 @@ export function VersionView({
     gaps: Gap[];
     report?: Report;
   }>();
-  const [upgrade, setUpgrade] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<string>();
   const [slow, setSlow] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string>();
   const inFlight = STEPS.slice(0, 4).includes(v.status);
 
   // Poll until the version is ready or failed.
@@ -73,7 +78,7 @@ export function VersionView({
       const { data } = await supabase
         .from("resume_versions")
         .select(
-          "id, label, version_number, status, error_message, latex_content, validation_result, analysis_id, resume_id",
+          "id, label, version_number, status, error_message, latex_content, validation_result, analysis_id, resume_id, job_description_id",
         )
         .eq("id", v.id)
         .single();
@@ -128,8 +133,45 @@ export function VersionView({
 
   async function download(type: "pdf" | "latex") {
     const r = await sign(type, true);
-    if (r.status === 403) setUpgrade(true);
+    if (r.status === 403)
+      setUpgradeReason("LaTeX download is available on the Pro plan.");
     else if (r.url) window.location.href = r.url;
+  }
+
+  // Retries with the SAME resume + job description this version used, so the user doesn't have to
+  // re-paste the job description or redo the ATS analysis. Re-uses the existing analysis row for
+  // that resume/JD pair (generate-resume looks it up by id) rather than re-running it.
+  async function retry() {
+    if (!v.job_description_id) return;
+    setRetrying(true);
+    setRetryError(undefined);
+    try {
+      const res = await fetch("/api/generate-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resumeId: v.resume_id,
+          jobDescriptionId: v.job_description_id,
+          label: v.label ?? undefined,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 402)
+        return setUpgradeReason(
+          "You've used all of your free generations this month.",
+        );
+      if (res.status === 429)
+        return setRetryError(
+          "A generation is already in progress. Please wait for it to finish.",
+        );
+      if (!res.ok)
+        return setRetryError(
+          "Could not start a new attempt. Please try again.",
+        );
+      router.push(`/versions/${body.versionId}`);
+    } finally {
+      setRetrying(false);
+    }
   }
 
   const step = STEPS.indexOf(v.status);
@@ -182,13 +224,42 @@ export function VersionView({
               <AlertCircle className="size-5" />{" "}
               {v.error_message ?? "Generation failed."}
             </p>
-            <Link
-              href={`/resumes/${v.resume_id}/tailor`}
-              className={buttonVariants()}
-            >
-              <RefreshCw className="size-4" /> Try again
-            </Link>
+            {retryError && (
+              <p role="alert" className="text-destructive text-sm">
+                {retryError}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-3">
+              {v.job_description_id ? (
+                <Button onClick={retry} disabled={retrying} size="lg">
+                  <RefreshCw
+                    className={"size-4" + (retrying ? " animate-spin" : "")}
+                  />
+                  {retrying ? "Starting new attempt…" : "Try again"}
+                </Button>
+              ) : (
+                <Link
+                  href={`/resumes/${v.resume_id}/tailor`}
+                  className={buttonVariants()}
+                >
+                  <RefreshCw className="size-4" /> Tailor to a job again
+                </Link>
+              )}
+              <Link
+                href={`/resumes/${v.resume_id}/tailor`}
+                className={
+                  buttonVariants({ variant: "outline" }) +
+                  " " +
+                  (retrying ? "pointer-events-none opacity-50" : "")
+                }
+              >
+                Change the job description
+              </Link>
+            </div>
             <p className="text-muted-foreground text-xs">
+              {v.job_description_id
+                ? "“Try again” reuses the same resume and job description — you don't need to re-paste anything. "
+                : ""}
               Failed attempts don&apos;t count against your free limit.
             </p>
           </CardContent>
@@ -283,9 +354,9 @@ export function VersionView({
         </>
       )}
       <UpgradeModal
-        open={upgrade}
-        onOpenChange={setUpgrade}
-        reason="LaTeX download is available on the Pro plan."
+        open={!!upgradeReason}
+        onOpenChange={(o) => !o && setUpgradeReason(undefined)}
+        reason={upgradeReason ?? ""}
       />
     </>
   );
