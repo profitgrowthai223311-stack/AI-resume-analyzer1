@@ -3,6 +3,53 @@ import { CANONICAL_PREAMBLE } from "./prompts";
 
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9+#]/g, "");
 const norm = (s: string) => s.replace(/\s+/g, " ").trim();
+const STOPWORDS = new Set([
+  "of",
+  "the",
+  "and",
+  "for",
+  "at",
+  "in",
+  "on",
+  "a",
+  "an",
+  "&",
+]);
+
+/**
+ * True if `value` looks like a truthful expansion of an abbreviation the source already uses
+ * (e.g. source says "UC Berkeley", the model wrote "University of California, Berkeley"). This is
+ * a common, truthful pattern in real resumes and shouldn't be rejected as fabrication.
+ *
+ * Deliberately requires more than initials matching a token: a leading portion of `value` must
+ * abbreviate to a token present in the source, AND the remaining, trailing words of `value` must
+ * also appear literally in the source (this is the corroborating evidence). Matching on initials
+ * alone (e.g. accepting "IBM" <-> "International Business Machines" with no word overlap at all)
+ * was tried and dropped — it can't tell a genuine expansion from an unrelated phrase that happens
+ * to share initials with some other abbreviation elsewhere in the source (a real failure found by
+ * this file's own adversarial test: "VIT" also happens to be the initials of "Very Impressive
+ * Technology", which is not a truthful expansion of anything).
+ */
+function isAbbreviationExpansion(value: string, source: string): boolean {
+  const words = value
+    .match(/[A-Za-z]+/g)
+    ?.filter((w) => !STOPWORDS.has(w.toLowerCase()));
+  if (!words || words.length < 2) return false;
+  const initials = (ws: string[]) => ws.map((w) => w[0].toUpperCase()).join("");
+  const hasToken = (token: string) =>
+    token.length >= 2 && new RegExp(`\\b${token}\\b`, "i").test(source);
+  const hasWords = (ws: string[]) =>
+    ws.every((w) => new RegExp(`\\b${w}\\b`, "i").test(source));
+
+  for (let split = 1; split < words.length; split++) {
+    if (
+      hasToken(initials(words.slice(0, split))) &&
+      hasWords(words.slice(split))
+    )
+      return true;
+  }
+  return false;
+}
 
 export type Warning = { rule: string; detail: string };
 export type CheckResult = {
@@ -123,7 +170,9 @@ export function checkLatex(raw: string, source: string): CheckResult {
   const warnings: Warning[] = [];
   let tex = raw.trim();
   const inSource = (v: string) =>
-    !squash(plain(v)) || squash(source).includes(squash(plain(v)));
+    !squash(plain(v)) ||
+    squash(source).includes(squash(plain(v))) ||
+    isAbbreviationExpansion(plain(v), source);
 
   // --- structure ---
   if (tex.includes("```")) errors.push("markdown_fence_present");
@@ -179,14 +228,18 @@ export function checkLatex(raw: string, source: string): CheckResult {
   if (depth !== 0) errors.push("unbalanced_braces");
 
   // --- links ---
+  // Strip "www." symmetrically (from both the href and the source) so a cosmetic difference in
+  // whether either side happens to include it doesn't fail an otherwise-genuine link.
+  const sourceForLinks = source.toLowerCase().replace(/\bwww\./g, "");
   for (const m of body.matchAll(/\\href\{([^}]*)\}/g)) {
     const url = m[1];
     if (!/^(https:\/\/|mailto:)/.test(url)) errors.push("non_https_link");
     else if (
-      !source.toLowerCase().includes(
+      !sourceForLinks.includes(
         url
           .replace(/^mailto:/, "")
           .replace(/^https:\/\//, "")
+          .replace(/^www\./, "")
           .replace(/\/$/, "")
           .toLowerCase(),
       )
@@ -206,7 +259,9 @@ export function checkLatex(raw: string, source: string): CheckResult {
   const sectionMatches = [...body.matchAll(/\\section\{([^}]+)\}/g)];
   const names = sectionMatches.map((m) => m[1]);
   const idx = names.map((n) => SECTIONS.indexOf(n));
-  if (idx.some((i) => i < 0) || idx.some((v, i) => i > 0 && v <= idx[i - 1]))
+  // Non-decreasing, not strictly increasing: a repeated section (same index twice) isn't a real
+  // ordering violation, only a section moving backward relative to one already seen is.
+  if (idx.some((i) => i < 0) || idx.some((v, i) => i > 0 && v < idx[i - 1]))
     errors.push("sections_invalid_or_out_of_order");
   if (!names.some((n) => ["Experience", "Projects", "Education"].includes(n)))
     errors.push("insufficient_content");

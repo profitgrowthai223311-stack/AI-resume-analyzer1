@@ -287,4 +287,85 @@ errs(
   good.replace("  \\resumeItemListEnd\n", ""),
   /unbalanced_resumeItemListStart/,
 );
+
+// Regression tests for a real live-generation bug report: the model truthfully expanding an
+// abbreviation ("UC Berkeley" -> "University of California, Berkeley") was rejected as
+// fabrication, and a cosmetic "www." difference could fail a genuine link.
+const berkeleySource = src.replace("VIT University, 2016", "UC Berkeley, 2016");
+const abbrevOk = checkLatex(
+  doc(
+    [
+      HEADER,
+      SUMMARY,
+      SKILLS("React"),
+      EXP("Acme Corp", ["Developed things."]),
+      EDU.replace("VIT University", "University of California, Berkeley"), // source now says "UC Berkeley"
+    ].join("\n"),
+  ),
+  berkeleySource,
+);
+check(
+  "truthful abbreviation expansion, corroborated by a literal trailing word (UC Berkeley -> University of California, Berkeley), accepted",
+  abbrevOk.ok,
+  abbrevOk.errors.join(","),
+);
+
+const fakeExpansion = checkLatex(
+  doc(
+    [
+      HEADER,
+      SUMMARY,
+      SKILLS("React"),
+      EXP("Acme Corp", ["Developed things."]),
+      EDU.replace("VIT University", "Very Impressive Technology"), // shares no real relation to "VIT"
+    ].join("\n"),
+  ),
+  src,
+);
+check(
+  "unrelated phrase sharing no real abbreviation link is still rejected",
+  !fakeExpansion.ok,
+  "should have been rejected",
+);
+
+const wwwOk = checkLatex(
+  doc(
+    [
+      HEADER.replace(
+        "https://github.com/janedoe",
+        "https://www.github.com/janedoe",
+      ), // source has no "www."
+      SUMMARY,
+      SKILLS("React"),
+      EXP("Acme Corp", ["Developed things."]),
+      EDU,
+    ].join("\n"),
+  ),
+  src,
+);
+check(
+  "cosmetic www. difference on a genuine link is tolerated",
+  wwwOk.ok,
+  wwwOk.errors.join(","),
+);
+
+const repeatedSectionOk = checkLatex(
+  doc(
+    [
+      HEADER,
+      SUMMARY,
+      SKILLS("React"),
+      EXP("Acme Corp", ["Developed things."]),
+      EXP("Acme Corp", ["More things."]), // same section header twice — repeated, not backward
+      EDU,
+    ].join("\n"),
+  ),
+  src,
+);
+check(
+  "a repeated (non-backward) section header is not treated as out of order",
+  repeatedSectionOk.ok,
+  repeatedSectionOk.errors.join(","),
+);
+
 process.exit(fails ? 1 : 0);

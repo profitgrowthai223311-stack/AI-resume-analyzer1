@@ -23,11 +23,16 @@ export async function runGeneration(versionId: string) {
       .from("resume_versions")
       .update({ status, ...extra })
       .eq("id", versionId);
-  const fail = async (code: string, message: string) => {
+  const fail = async (
+    code: string,
+    message: string,
+    debug: Record<string, unknown> = {},
+  ) => {
     await setStatus("failed", {
       error_code: code,
       error_message: message,
       completed_at: new Date().toISOString(),
+      ...debug,
     });
     // A failed generation does not consume the user's quota.
     await admin
@@ -87,9 +92,20 @@ export async function runGeneration(versionId: string) {
       feedback = `\n\nYOUR PREVIOUS OUTPUT FAILED VALIDATION (${check.errors.join("; ")}). Output the complete corrected LaTeX again. Copy the preamble exactly, escape special characters, and use only facts, names, dates and figures from the ORIGINAL RESUME.`;
     }
     if (!check?.ok)
+      // Persist the actual failing output (never shown to the user; the failed-status UI branch
+      // doesn't render latex_content/validation_result) so a recurrence can be diagnosed from the
+      // database directly instead of needing to be reproduced live.
       return fail(
         "latex_validation_failed",
         `The generated resume failed validation (${check?.errors.slice(0, 3).join(", ")}). Please try again.`,
+        {
+          latex_content: check?.tex ?? null,
+          validation_result: {
+            ok: false,
+            errors: check?.errors ?? [],
+            warnings: check?.warnings ?? [],
+          },
+        },
       );
 
     const tex = check.tex;
