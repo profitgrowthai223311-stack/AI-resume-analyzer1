@@ -3,6 +3,35 @@
 Session-by-session history of work done on this project. Newest entry at the top. See [CLAUDE.md](CLAUDE.md) for the
 logging convention and the current "remaining work" list.
 
+## 2026-09-29 — Fixed a real LaTeX validation false-positive; found and cleared an accidental secrets leak
+
+- User reported a generation failing with `link_not_in_source, sections_invalid_or_out_of_order`. Rather than
+  guessing, reproduced against the live model (the failing raw output wasn't stored anywhere at the time — fixed
+  that too, see below): stress-tested `checkLatex()` with several realistic resume/JD pairs and found a 100%
+  reproducible bug (13/13 failures) — a truthful abbreviation expansion (source "UC Berkeley" → model output
+  "University of California, Berkeley") was rejected as fabrication by the exact-substring fact checker. Didn't
+  manage to independently reproduce the `link_not_in_source` half live in ~25 attempts, but diagnosed the most likely
+  cause (a cosmetic `www.`/scheme difference) and fixed it defensively, since it's the same class of over-strict
+  matching.
+- Fixed in `src/lib/server/latex-check.ts`:
+  - `isAbbreviationExpansion()` — accepts a value only when a leading portion abbreviates to a token present in the
+    source **and** the trailing words also appear literally (corroboration required). Tried a looser whole-value
+    "initials only" version first; a new adversarial unit test I wrote for it immediately caught it wrongly accepting
+    an unrelated phrase ("Very Impressive Technology") that just happens to share initials with a real abbreviation
+    ("VIT") — dropped that variant rather than ship a weaker anti-fabrication guarantee.
+  - Link check now strips `www.` symmetrically from both sides before comparing.
+  - Section-order check now only flags a section moving backward, not a section repeated at the same position.
+  - Re-ran the originally-failing live reproduction after the fix: 8/8 passed (was 8/8 failing before).
+- `src/lib/server/generate.ts` now persists the failing attempt's raw LaTeX and validation errors/warnings to the
+  version row even on final failure (never shown to the user — the failed-status UI branch doesn't render it), so a
+  recurrence can be diagnosed from the database instead of needing another live reproduction.
+- Added 4 new regression tests to `scripts/test-guardrails.ts` (now 30 checks, all passing); full suite (136 checks)
+  re-run clean afterward, plus a production build.
+- Mid-session, found something unrelated but important while reviewing `git status`: the **working copy** of
+  `.env.example` (never committed) had real secret values pasted into it, most likely an accidental edit while it was
+  open in the user's editor. Verified this never reached git (re-scanned the entire history for every secret value —
+  zero hits, both before and after) and restored the file from `HEAD` before it could get swept into a commit.
+
 ## 2026-09-29 — Enforced the Free plan's total-upload cap
 
 - Scoped to exactly one item from the remaining-work list at the user's request: PRD §6's "2 resume uploads total"
