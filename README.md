@@ -190,10 +190,18 @@ The e2e scripts create temporary users in the configured Supabase project and de
 
 - [ ] Connect the GitHub repo; build command `npm run build` (see `netlify.toml`).
 - [ ] Add env vars listed in `netlify.toml` (mark server secrets as secret). `NEXT_PUBLIC_*` are inlined at build time.
+- [ ] **Do not add `SUPABASE_DB_URL`** to Netlify's environment — it's CLI-only (see `netlify.toml`'s comment) and holds your DB password; if you already added it while testing, remove it from Site settings → Environment variables.
 - [ ] `NEXT_PUBLIC_SITE_URL` = production URL; add `<url>/auth/callback` to Supabase redirect URLs.
 - [ ] Razorpay webhook → `<url>/api/razorpay-webhook`; switch to live keys + live plan IDs for production.
 - [ ] Test signed PDF download and a test-mode payment on a deploy preview.
 - [ ] **Rotate every key that was ever pasted into chat or shared** (OpenAI, Razorpay, Supabase service role, DB password).
+
+**If the build fails at "Secrets scanning found secrets in build output":** this is Netlify's own post-build
+scanner, and it's largely false positives on a Next.js site — `NEXT_PUBLIC_*` vars are _meant_ to end up in the
+client bundle. `netlify.toml` already sets `SECRETS_SCAN_OMIT_KEYS` (for the vars that are genuinely not secret) and
+`SECRETS_SCAN_OMIT_PATHS` (to exclude the Next.js/Turbopack build cache, where real secrets can transiently appear
+as a build-time cache artifact without ever being served). If you add a new env var later, add it to
+`SECRETS_SCAN_OMIT_KEYS` too if it isn't an actual credential.
 
 ## Known limitations / next steps
 

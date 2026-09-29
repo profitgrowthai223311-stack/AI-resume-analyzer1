@@ -4,6 +4,18 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # Netlify's post-build secrets scanner flags every occurrence of every configured env var's
+  # value anywhere in the repo/build output — including ones that are *supposed* to be public.
+  # NEXT_PUBLIC_* vars are meant to ship to the browser (that's what the prefix means), and the
+  # rest listed here are plain config (a model name, a public API endpoint, numeric limits, plan
+  # IDs — none of them are credentials), so they're excluded from the scan by key.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_SITE_URL,NEXT_PUBLIC_RAZORPAY_KEY_ID,NEXT_PUBLIC_MAX_UPLOAD_MB,OPENAI_MODEL,LATEX_COMPILER_URL,FREE_MONTHLY_GENERATIONS,FREE_TOTAL_UPLOADS,MAX_UPLOAD_MB,RAZORPAY_PLAN_ID_MONTHLY,RAZORPAY_PLAN_ID_YEARLY"
+  # The real secrets (service role key, OpenAI key, Razorpay secret/webhook secret) are never baked
+  # into anything served — Next.js's build cache can still capture a snapshot of the build-time
+  # environment for its own reuse, so that cache directory (never part of the deployed output) is
+  # excluded from the path scan. Everything actually shipped (functions, edge functions, static
+  # output) stays scanned.
+  SECRETS_SCAN_OMIT_PATHS = ".netlify/.next/cache/**"
 
 # Netlify's OpenNext runtime is applied automatically for Next.js sites.
 # Set env vars in Site settings → Environment variables (mark server secrets as secret):
@@ -11,4 +23,8 @@
 #   NEXT_PUBLIC_RAZORPAY_KEY_ID, NEXT_PUBLIC_MAX_UPLOAD_MB   (public)
 #   SUPABASE_SERVICE_ROLE_KEY, OPENAI_API_KEY, OPENAI_MODEL, RAZORPAY_KEY_SECRET,
 #   RAZORPAY_WEBHOOK_SECRET, RAZORPAY_PLAN_ID_MONTHLY, RAZORPAY_PLAN_ID_YEARLY,
-#   LATEX_COMPILER_URL, FREE_MONTHLY_GENERATIONS, MAX_UPLOAD_MB                (server-only)
+#   LATEX_COMPILER_URL, FREE_MONTHLY_GENERATIONS, FREE_TOTAL_UPLOADS, MAX_UPLOAD_MB (server-only)
+#
+# Do NOT set SUPABASE_DB_URL here — it's used only by the Supabase CLI for local migrations
+# (`supabase db push`) and the deployed app never reads it. It holds your database password, so
+# leaving it out of Netlify's environment entirely removes it as a risk surface here.
