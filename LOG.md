@@ -3,6 +3,23 @@
 Session-by-session history of work done on this project. Newest entry at the top. See [CLAUDE.md](CLAUDE.md) for the
 logging convention and the current "remaining work" list.
 
+## 2026-09-29 — Failed generations can now be retried in place
+
+- User couldn't actually retry a failed version — the "Try again" link just sent them to the tailor form to re-paste
+  the job description and redo the ATS analysis from scratch.
+- `VersionView`'s "Try again" button (`src/components/resume/version-view.tsx`) now calls `POST /api/generate-resume`
+  directly with the failed version's own `resumeId`/`jobDescriptionId`, so the existing job description and its
+  existing `ats_analyses` row are reused — no re-pasting, no re-analysis. Still a completely normal generation call
+  otherwise: still gated by the free quota, still rate-limited, still blocked if one is already in progress (all
+  reuse the same server-side checks, so this isn't a way around any of them). If the job description was since
+  deleted, falls back to the tailor-page link instead of a broken retry.
+- Had to thread `job_description_id` through the version page's query and the client polling select to make this
+  possible; also refactored the LaTeX-download upgrade prompt to a shared `upgradeReason` string state so the same
+  modal can now report either reason (LaTeX-is-Pro-only, or free-quota-exhausted-on-retry).
+- Live test: `scripts/e2e-retry.mjs` (10 checks) — retry produces a genuinely new version, reuses the same analysis
+  row, 404s cleanly if the JD is gone, and still hits the 402 quota wall like any other generation. Full suite
+  re-run clean afterward, plus a production build.
+
 ## 2026-09-29 — Fixed a real LaTeX validation false-positive; found and cleared an accidental secrets leak
 
 - User reported a generation failing with `link_not_in_source, sections_invalid_or_out_of_order`. Rather than
