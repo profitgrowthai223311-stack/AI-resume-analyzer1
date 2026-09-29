@@ -133,6 +133,12 @@ export default async function PricingPage() {
             Razorpay. We never see or store your card details. Scores are
             advisory and do not guarantee interviews or hiring outcomes.
           </p>
+          <p className="text-muted-foreground text-center text-xs">
+            Subscriptions need a card that supports recurring payments. If yours
+            is declined for that reason, try a different card or another method
+            shown in the payment window (such as UPI), or reach out and
+            we&apos;ll help.
+          </p>
         </div>
       </main>
       <MarketingFooter />

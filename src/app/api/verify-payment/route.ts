@@ -60,13 +60,11 @@ export async function POST(request: Request) {
   // attempt that recorded the event but failed before finishing (e.g. Razorpay was unreachable)
   // is retried rather than short-circuited, so a transient failure can't be mistaken for success.
   const eventId = `checkout:${paymentId}`;
-  const { error: insertError } = await admin
-    .from("payment_events")
-    .insert({
-      provider_event_id: eventId,
-      event_type: "checkout.payment_verified",
-      payload: body.data,
-    });
+  const { error: insertError } = await admin.from("payment_events").insert({
+    provider_event_id: eventId,
+    event_type: "checkout.payment_verified",
+    payload: body.data,
+  });
   if (insertError && insertError.code !== "23505")
     return json({ error: "store_failed" }, 500);
   if (insertError?.code === "23505") {

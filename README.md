@@ -22,33 +22,35 @@ Razorpay: create the webhook at `<site>/api/razorpay-webhook` (events: `subscrip
 
 ## How it works
 
-| Step                                                | Where                                                                                            |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Upload + validation (extension, size, magic bytes)   | `src/components/resume/resume-uploader.tsx`                                                      |
-| Text extraction (unpdf / mammoth)                    | `POST /api/extract-resume`                                                                       |
-| JD requirements + ATS score + evidence map           | `POST /api/analyze-ats` → `src/lib/server/ats.ts`                                                |
-| Generation pipeline                                  | `POST /api/generate-resume` → `src/lib/server/generate.ts`                                       |
-| System prompts (owner-supplied)                      | `src/lib/server/prompts.ts`                                                                      |
-| LaTeX validation + fact enforcement + sanitizing     | `src/lib/server/latex-check.ts`                                                                  |
-| PDF compile (multipart `pdflatex`)                   | `src/lib/server/compile.ts`                                                                      |
-| Checkout + subscription creation                     | `POST /api/create-checkout`                                                                      |
-| Payment confirmation (browser, signature-verified)   | `POST /api/verify-payment`                                                                       |
-| Payment confirmation (webhook, reconciliation)        | `POST /api/razorpay-webhook`                                                                      |
-| Cancel subscription                                  | `POST /api/cancel-subscription`                                                                  |
-| Signed downloads (LaTeX = Pro)                       | `GET /api/download`                                                                              |
-| Deletion                                             | `DELETE /api/account`, `DELETE /api/resumes/[resumeId]`                                          |
+| Step                                               | Where                                                      |
+| -------------------------------------------------- | ---------------------------------------------------------- |
+| Upload + validation (extension, size, magic bytes) | `src/components/resume/resume-uploader.tsx`                |
+| Text extraction (unpdf / mammoth)                  | `POST /api/extract-resume`                                 |
+| JD requirements + ATS score + evidence map         | `POST /api/analyze-ats` → `src/lib/server/ats.ts`          |
+| Generation pipeline                                | `POST /api/generate-resume` → `src/lib/server/generate.ts` |
+| System prompts (owner-supplied)                    | `src/lib/server/prompts.ts`                                |
+| LaTeX validation + fact enforcement + sanitizing   | `src/lib/server/latex-check.ts`                            |
+| PDF compile (multipart `pdflatex`)                 | `src/lib/server/compile.ts`                                |
+| Checkout + subscription creation                   | `POST /api/create-checkout`                                |
+| Payment confirmation (browser, signature-verified) | `POST /api/verify-payment`                                 |
+| Payment confirmation (webhook, reconciliation)     | `POST /api/razorpay-webhook`                               |
+| Cancel subscription                                | `POST /api/cancel-subscription`                            |
+| Signed downloads (LaTeX = Pro)                     | `GET /api/download`                                        |
+| Deletion                                           | `DELETE /api/account`, `DELETE /api/resumes/[resumeId]`    |
 
 ### Prompts and anti-fabrication design
+
 Both AI steps use the owner-supplied system prompts verbatim (`src/lib/server/prompts.ts`): the ATS analyzer (JSON output)
 and the LaTeX resume writer. The resume prompt demands exactly 8 bullets with real metrics per company, extra JD tools
 and the JD's city, which would force fabrication, so a **TRUTHFULNESS OVERRIDE** block is appended that supersedes
 those rules (per PRD section 12). The model's output is then checked by `checkLatex`:
+
 - structure: starts/ends correctly, no fences, preamble identical to the template, allow-listed commands/environments only,
   balanced environments, sections in order, escaped special characters, https/mailto links that exist in the resume;
 - facts: name, email, phone, location, employers, titles, dates, schools, degrees and project names must appear in the
   resume; unsupported bullets (invented figures), skills and certifications are removed and reported as warnings;
 - one automatic retry with the failure reasons; otherwise the version fails with a safe message and is not charged.
-ATS "matched" skills are verified against the resume text; unverified ones are shown as "related but unproven".
+  ATS "matched" skills are verified against the resume text; unverified ones are shown as "related but unproven".
 
 ### Payment confirmation: browser-verified, not webhook-only
 
@@ -68,6 +70,21 @@ A full automated browser test (real Razorpay Checkout UI + test card `4111 1111 
 Puppeteer; Razorpay's checkout responded to the headless browser by loading an hCaptcha/bot-detection challenge, which
 was not bypassed. The endpoint's logic is instead verified directly against the live Razorpay API (above). Recommend
 a manual click-through with a test card before going live.
+
+#### "This card is not eligible for recurring payments"
+
+Razorpay Subscriptions only accepts payment instruments capable of a recurring mandate — not every card qualifies,
+and this is a real-world limitation your customers will hit too, not just a test-mode quirk. **Which methods are
+offered for Subscriptions (UPI Autopay, additional card networks, eNACH, …) is an account-level setting that only
+Razorpay Support can change — it is not exposed in the Dashboard or any API**, so this can't be fixed from the
+codebase. To get more methods enabled, open a ticket with Razorpay support and ask them to enable UPI Autopay (and
+any other recurring-capable methods you want) for Subscriptions on your account. In the meantime:
+
+- `CheckoutButton` (`src/components/billing/checkout-button.tsx`) listens for Razorpay's `payment.failed` event and
+  shows a specific, actionable message in the app (not just Razorpay's own in-modal banner) when a card is rejected
+  for this reason.
+- Whatever methods Razorpay _does_ enable for your account show up automatically in the checkout modal — the code
+  never restricts `method` — so once support enables more, no code change is needed here.
 
 ### AI model
 

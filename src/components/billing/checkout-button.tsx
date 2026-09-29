@@ -4,9 +4,14 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
+type RazorpayInstance = {
+  open: () => void;
+  on: (event: "payment.failed", cb: (response: PaymentFailed) => void) => void;
+};
+
 declare global {
   interface Window {
-    Razorpay?: new (opts: Record<string, unknown>) => { open: () => void };
+    Razorpay?: new (opts: Record<string, unknown>) => RazorpayInstance;
   }
 }
 
@@ -15,6 +20,23 @@ type CheckoutSuccess = {
   razorpay_subscription_id: string;
   razorpay_signature: string;
 };
+
+type PaymentFailed = {
+  error: {
+    code: string;
+    description?: string;
+    reason?: string;
+    metadata?: { payment_id?: string };
+  };
+};
+
+// Reasons Razorpay uses for a card/method that can't be used for a recurring subscription charge.
+// Enabling additional recurring-capable methods (e.g. UPI Autopay, more card networks) for
+// Subscriptions is an account-level setting only Razorpay support can change — see README.
+const RECURRING_INELIGIBLE = new Set([
+  "payment_method_not_supported",
+  "card_not_recurring_enabled",
+]);
 
 function loadCheckout() {
   return new Promise<boolean>((resolve) => {
@@ -62,14 +84,28 @@ export function CheckoutButton({
       );
     }
     const { subscriptionId, keyId } = await res.json();
-    new window.Razorpay!({
+    const rzp = new window.Razorpay!({
       key: keyId,
       subscription_id: subscriptionId,
       name: "AI Resume Analyzer",
       description: "Pro subscription",
       handler: (response: CheckoutSuccess) => confirm(response),
       modal: { ondismiss: () => setState("idle") },
-    }).open();
+    });
+    // Razorpay's own checkout UI already shows a failure banner and lets the shopper try another
+    // method there; this just makes sure OUR page also has a clear, specific explanation once they
+    // leave the modal, instead of silently going back to an unlabelled "Upgrade" button.
+    rzp.on("payment.failed", (response) => {
+      const reason = response.error?.reason ?? "";
+      setState("idle");
+      setError(
+        RECURRING_INELIGIBLE.has(reason)
+          ? "This card doesn't support recurring subscription payments. Try a different card, or use UPI if it's offered in the payment window."
+          : (response.error?.description ??
+              "The payment did not go through. Please try again with a different card or payment method."),
+      );
+    });
+    rzp.open();
   }
 
   // Razorpay hands the browser a payment id, subscription id and a signature it alone could have
