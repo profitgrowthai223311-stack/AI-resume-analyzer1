@@ -74,17 +74,30 @@ a manual click-through with a test card before going live.
 #### "This card is not eligible for recurring payments"
 
 Razorpay Subscriptions only accepts payment instruments capable of a recurring mandate — not every card qualifies,
-and this is a real-world limitation your customers will hit too, not just a test-mode quirk. **Which methods are
-offered for Subscriptions (UPI Autopay, additional card networks, eNACH, …) is an account-level setting that only
-Razorpay Support can change — it is not exposed in the Dashboard or any API**, so this can't be fixed from the
-codebase. To get more methods enabled, open a ticket with Razorpay support and ask them to enable UPI Autopay (and
-any other recurring-capable methods you want) for Subscriptions on your account. In the meantime:
+and this is a real-world limitation your customers will hit too, not just a test-mode quirk. Two independent things
+affect which methods a shopper sees:
 
-- `CheckoutButton` (`src/components/billing/checkout-button.tsx`) listens for Razorpay's `payment.failed` event and
-  shows a specific, actionable message in the app (not just Razorpay's own in-modal banner) when a card is rejected
-  for this reason.
-- Whatever methods Razorpay _does_ enable for your account show up automatically in the checkout modal — the code
-  never restricts `method` — so once support enables more, no code change is needed here.
+1. **Which methods are switched on for Subscriptions on this account** — Dashboard → Subscriptions → Settings →
+   Payment Methods, where Card, UPI and eMandate each have their own on/off toggle. Card is on by default; turn on
+   UPI and eMandate there too if you want them offered. (The underlying bank/network coverage behind eMandate and
+   some card networks can still need a Razorpay support request, but the top-level on/off switch is self-service.)
+2. **Whether the specific card entered supports a recurring mandate at all** — most don't, in test mode or live. Use
+   one of Razorpay's dedicated recurring-payment test cards, not the generic one-time test card:
+
+   | Network    | Type                 | Card number           | Expiry / CVV             |
+   | ---------- | -------------------- | --------------------- | ------------------------ |
+   | Visa       | Domestic credit      | `4718 6091 0820 4366` | any future date, any CVV |
+   | Mastercard | International credit | `5104 0155 5555 5558` | any future date, any CVV |
+   | Mastercard | International debit  | `5104 0600 0000 0008` | any future date, any CVV |
+
+   On the OTP/bank page, any 4–10 digit code succeeds. Test-mode card tokens are only valid for 3 days, so testing a
+   renewal past that window needs the "Charge this now" button in the subscription's dashboard page rather than
+   waiting for the real due date. These numbers only work in Test Mode.
+
+Regardless of the above, `CheckoutButton` (`src/components/billing/checkout-button.tsx`) listens for Razorpay's
+`payment.failed` event and shows a specific, actionable message in the app — not just Razorpay's own in-modal banner
+— when a card is rejected for this reason. The code never restricts which `method`s Checkout offers, so whatever is
+enabled in the Dashboard shows up automatically; no code change is needed when you turn more on.
 
 ### AI model
 
