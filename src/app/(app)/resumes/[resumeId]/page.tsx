@@ -27,7 +27,7 @@ export default async function ResumePage({
   const { data: resume } = await supabase
     .from("resumes")
     .select(
-      "id, display_name, original_file_type, original_file_size, extraction_status, extraction_error, extracted_text, structured_content, parser_name, created_at",
+      "id, display_name, original_file_path, original_file_type, original_file_size, extraction_status, extraction_error, extracted_text, structured_content, parser_name, created_at",
     )
     .eq("id", resumeId)
     .maybeSingle();
@@ -80,6 +80,7 @@ export default async function ResumePage({
                 initialText={resume.extracted_text ?? ""}
                 status={resume.extraction_status}
                 error={resume.extraction_error}
+                hasOriginalFile={!!resume.original_file_path}
                 warnings={
                   (resume.structured_content as { warnings?: string[] } | null)
                     ?.warnings ?? []

@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,15 +14,18 @@ export function ExtractionReviewEditor({
   status,
   error,
   warnings,
+  hasOriginalFile,
 }: {
   resumeId: string;
   initialText: string;
   status: string;
   error?: string | null;
   warnings: string[];
+  hasOriginalFile: boolean;
 }) {
   const [text, setText] = useState(initialText);
   const [saving, setSaving] = useState(false);
+  const [reextracting, setReextracting] = useState(false);
   const failed = status === "failed";
 
   async function save() {
@@ -39,6 +43,36 @@ export function ExtractionReviewEditor({
     else toast.success("Saved. This text will be used to tailor your resume.");
   }
 
+  // Re-runs extraction on the original file. Useful after we improve extraction (e.g. recovering
+  // links that only exist as PDF/DOCX hyperlinks, not in the visible text) for a resume uploaded
+  // before that improvement — no re-upload needed. Overwrites unsaved edits in the box below.
+  async function reextract() {
+    if (
+      text !== initialText &&
+      !window.confirm(
+        "This replaces the text below with a fresh extraction from your original file. Continue?",
+      )
+    )
+      return;
+    setReextracting(true);
+    try {
+      const res = await fetch("/api/extract-resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.status !== "complete") {
+        toast.error("Could not re-extract. Please try again.");
+        return;
+      }
+      setText(body.extractedText ?? "");
+      toast.success("Re-extracted from your original file.");
+    } finally {
+      setReextracting(false);
+    }
+  }
+
   return (
     <div className="space-y-3">
       {failed && (
@@ -51,11 +85,26 @@ export function ExtractionReviewEditor({
           {w}
         </p>
       ))}
-      <Label htmlFor="text">
-        {failed
-          ? "Paste your resume text"
-          : "Review and correct the extracted text — this is what we'll use"}
-      </Label>
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor="text">
+          {failed
+            ? "Paste your resume text"
+            : "Review and correct the extracted text — this is what we'll use"}
+        </Label>
+        {hasOriginalFile && !failed && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={reextract}
+            disabled={reextracting}
+          >
+            <RefreshCw
+              className={"size-3.5" + (reextracting ? " animate-spin" : "")}
+            />
+            {reextracting ? "Re-extracting…" : "Re-extract from file"}
+          </Button>
+        )}
+      </div>
       <Textarea
         id="text"
         value={text}

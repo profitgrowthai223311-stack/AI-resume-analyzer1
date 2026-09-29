@@ -59,16 +59,24 @@ export type CheckResult = {
   warnings: Warning[];
 };
 
-const SECTIONS = [
+// Sections other logic keys off by exact name (sectionAt() routes fact-checks by these, and the
+// Technical Skills / Certifications sanitizers below match these exact headings) — these must stay
+// in this order and keep this exact spelling.
+const CORE_SECTIONS = [
   "Professional Summary",
   "Technical Skills",
   "Experience",
   "Projects",
   "Education",
   "Certifications",
-  "Awards \\& Achievements",
-  "Publications",
 ];
+// The template's last two slots ("Awards & Achievements", "Publications") are genuinely optional
+// and nothing else in the checker depends on their exact name, so real resumes' own wording for
+// this kind of closing content ("Achievements & Leadership", "Honors", "Volunteer Experience", a
+// section literally titled differently from the template but describing the same kind of content)
+// is accepted rather than rejected as "invalid". Capped so the model can't pad with invented
+// sections instead of actually having more content.
+const MAX_EXTRA_SECTIONS = 2;
 
 // Body commands are allow-listed (the preamble is verified byte-for-byte separately).
 const ALLOWED_COMMANDS = new Set([
@@ -258,10 +266,20 @@ export function checkLatex(raw: string, source: string): CheckResult {
   // --- sections ---
   const sectionMatches = [...body.matchAll(/\\section\{([^}]+)\}/g)];
   const names = sectionMatches.map((m) => m[1]);
-  const idx = names.map((n) => SECTIONS.indexOf(n));
-  // Non-decreasing, not strictly increasing: a repeated section (same index twice) isn't a real
-  // ordering violation, only a section moving backward relative to one already seen is.
-  if (idx.some((i) => i < 0) || idx.some((v, i) => i > 0 && v < idx[i - 1]))
+  const coreIdx = names.map((n) => CORE_SECTIONS.indexOf(n));
+  // Core sections must stay non-decreasing relative to each other (a repeat isn't a violation,
+  // only moving backward is); non-core names are the flexible "extra" slots and are exempt from
+  // ordering, just capped in count so they can't be used to pad the document with invented sections.
+  let lastCore = -1;
+  for (const i of coreIdx) {
+    if (i < 0) continue;
+    if (i < lastCore) {
+      errors.push("sections_invalid_or_out_of_order");
+      break;
+    }
+    lastCore = i;
+  }
+  if (coreIdx.filter((i) => i < 0).length > MAX_EXTRA_SECTIONS)
     errors.push("sections_invalid_or_out_of_order");
   if (!names.some((n) => ["Experience", "Projects", "Education"].includes(n)))
     errors.push("insufficient_content");
@@ -300,10 +318,17 @@ export function checkLatex(raw: string, source: string): CheckResult {
     errors.push("phone_not_in_source");
 
   // --- summary numbers ---
-  const summary =
+  // Only the prose inside \small{...} — the surrounding block also has the template's own
+  // \vspace{2pt}/\vspace{4pt} spacing, and a naive check over the whole block would flag "4" from
+  // "4pt" as an unsupported claim (this fired on every summary whose resume happened not to
+  // contain a coincidental literal "4" elsewhere, which is exactly the kind of thing "no digit 4
+  // anywhere in this resume" test data exposes and a longer, number-heavy resume can mask).
+  const summaryBlock =
     body.match(
       /\\section\{Professional Summary\}([\s\S]*?)(?=\\section\{|$)/,
     )?.[1] ?? "";
+  const summary =
+    summaryBlock.match(/\\small\{([\s\S]*?)\}/)?.[1] ?? summaryBlock;
   const years = [...source.matchAll(/\b(19|20)\d{2}\b/g)].map((m) =>
     Number(m[0]),
   );

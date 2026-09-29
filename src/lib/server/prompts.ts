@@ -302,6 +302,7 @@ This product must never fabricate resume content. Where any rule above conflicts
 - Header: use the candidate's real location exactly as in the ORIGINAL RESUME. Do NOT change the city to the job's location. If the resume has no location, omit it.
 - Professional Summary: only claims supported by the resume. Use the exact JD job title only as the target role. State years of experience only when derivable from the resume's dates.
 - Include Projects, Certifications, Awards and Publications only if present in the ORIGINAL RESUME, copied exactly.
+- Links (LinkedIn, GitHub, portfolio, project demos, etc.): include a hyperlink ONLY if that exact URL literally appears in the ORIGINAL RESUME text (this includes any "Links found in document" list appended to it — those are real links recovered from the file and should be preferred over guessing). NEVER construct, complete or guess a URL from a name, username or platform mentioned elsewhere — a guessed URL is very often simply wrong, not just unverifiable. If no URL exists in the source for a given platform, omit that link entirely; do not invent one.
 - The JD keywords listed as UNSUPPORTED in the input notes must not appear as experience or skills.
 - Output remains raw LaTeX only, beginning with \documentclass and ending with \end{document}.`);
 

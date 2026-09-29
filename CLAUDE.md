@@ -35,7 +35,7 @@ before a real launch; this is still outstanding as of the last log entry.
 npm run test:guardrails                      # unit, no server needed
 ./scripts/dev-test-server.sh                 # build + start on :3111 first
 npm run test:rls && npm run test:extract && npm run test:ats \
-  && npm run test:generate && npm run test:adversarial && npm run test:verify-payment \
+  && npm run test:generate && npm run test:generate-links && npm run test:adversarial && npm run test:verify-payment \
   && npm run test:upload-limit && npm run test:retry && npm run test:billing && npm run test:pages
 ```
 

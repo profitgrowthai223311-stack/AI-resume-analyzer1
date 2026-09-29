@@ -19,6 +19,7 @@
     "test:verify-payment": "node scripts/e2e-verify-payment.mjs",
     "test:upload-limit": "node scripts/e2e-upload-limit.mjs",
     "test:retry": "node scripts/e2e-retry.mjs",
+    "test:generate-links": "node scripts/e2e-generate-links.mjs",
     "format": "prettier --write .",
     "typecheck": "next typegen && tsc --noEmit"
   },

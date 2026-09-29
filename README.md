@@ -38,6 +38,24 @@ Razorpay: create the webhook at `<site>/api/razorpay-webhook` (events: `subscrip
 | Signed downloads (LaTeX = Pro)                     | `GET /api/download`                                        |
 | Deletion                                           | `DELETE /api/account`, `DELETE /api/resumes/[resumeId]`    |
 
+### Text extraction recovers hyperlinks, not just visible text
+
+Resume templates very commonly render GitHub/LinkedIn/etc. as an icon or bare username, with the actual URL living
+only in a PDF hyperlink annotation (or a DOCX hyperlink field) — invisible to plain-text extraction. Without it, the
+model has no way to know the real URL and may (truthfully, but incorrectly) guess one from a visible username, which
+can produce a wrong link even when nothing is being fabricated conceptually — this happened for real: a resume with
+no visible LinkedIn URL, only the name "Mohan Rao", got a guessed `linkedin.com/in/mohan-rao` when the real profile
+was `linkedin.com/in/mohan-rao-b3b092257`. `extractFromFile` (`src/lib/server/extract.ts`) now also reads PDF link
+annotations via pdf.js (`page.getAnnotations()`) and DOCX hyperlinks via `mammoth.convertToHtml`, and appends any
+found as a `Links found in document:` block to the extracted text — visible on the review screen, and part of the
+same text used as the generation/fact-checking source of truth. `GENERATE_SYSTEM_PROMPT` also now explicitly forbids
+constructing a URL from a name or username; only a URL that's literally present in the source may be used.
+
+A resume extracted before this fix won't have this recovered automatically — click **"Re-extract from file"** on the
+resume's review screen (calls the same `POST /api/extract-resume` endpoint again; safe to re-run). Live test:
+`npm run test:generate-links` (uses `scripts/fixtures/sample-resume-with-links.pdf`, a fixture compiled through this
+project's own LaTeX pipeline specifically to have real hyperlink annotations behind icon-only visible text).
+
 ### Prompts and anti-fabrication design
 
 Both AI steps use the owner-supplied system prompts verbatim (`src/lib/server/prompts.ts`): the ATS analyzer (JSON output)
@@ -54,7 +72,21 @@ those rules (per PRD section 12). The model's output is then checked by `checkLa
 
 If a version does fail, its raw LaTeX and validation errors/warnings are saved to that row (never shown to the user —
 the failed-status UI branch doesn't render them) so a recurrence can be diagnosed from the database directly instead
-of needing to be reproduced live.
+of needing to be reproduced live. This paid off directly: a real "link_not_in_source, sections_invalid_or_out_of_order"
+report was diagnosed from these saved records rather than guessed at, and led to three fixes to the fact-checker's own
+false-positive rate (`src/lib/server/latex-check.ts`), each caught live against the real model, not just in unit tests:
+
+- a truthful abbreviation expansion ("UC Berkeley" → "University of California, Berkeley") was being rejected as
+  fabrication — fixed with corroborated-abbreviation matching (a looser, uncorroborated version was tried and
+  dropped after this file's own adversarial test caught it wrongly accepting an unrelated phrase that happened to
+  share initials with a real one);
+- a resume's own wording for its closing "extra" section (e.g. "Achievements & Leadership" instead of the template's
+  exact "Awards & Achievements") was rejected as an "unknown section" — the two trailing template slots now accept
+  any reasonably-capped number of non-core section names, since nothing else in the checker depends on their exact
+  spelling, while the six load-bearing core sections stay strict;
+- the summary-number check was reading the template's own `\vspace{4pt}` spacing as if "4" were an unsupported claim
+  — masked in every other test fixture by a coincidental "4" elsewhere (a phone number, a percentage), and only
+  fixed once a test fixture without one exposed it. Now scoped to just the prose inside `\small{...}`.
 
 **Retrying a failed version** (the "Try again" button on `/versions/[versionId]`) calls `POST /api/generate-resume`
 again with the _same_ `resumeId` and `jobDescriptionId` the failed version used — the user doesn't re-paste the job
@@ -148,7 +180,7 @@ Generation runs in the background via `after()` and the client polls the version
 npm run test:guardrails                      # unit: LaTeX validator + fact checks (no server)
 ./scripts/dev-test-server.sh                 # build + start on :3111
 npm run test:rls && npm run test:extract && npm run test:ats \
-  && npm run test:generate && npm run test:adversarial && npm run test:verify-payment \
+  && npm run test:generate && npm run test:generate-links && npm run test:adversarial && npm run test:verify-payment \
   && npm run test:upload-limit && npm run test:retry && npm run test:billing && npm run test:pages
 ```
 

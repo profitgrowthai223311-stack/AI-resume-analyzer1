@@ -1,4 +1,5 @@
 import {
+  admin,
   api,
   check,
   cleanup,
@@ -8,6 +9,11 @@ import {
 } from "./lib.mjs";
 try {
   const u = await tempUser("ext");
+  // This test uploads 3 fixtures; the Free plan's total-upload cap is covered separately by
+  // test:upload-limit, so make this user Pro to keep that concern out of this test.
+  await admin
+    .from("subscriptions")
+    .insert({ user_id: u.id, status: "active", plan_code: "monthly" });
   for (const [file, type] of [
     ["sample-resume.pdf", "pdf"],
     ["sample-resume.docx", "docx"],
@@ -35,6 +41,31 @@ try {
         !!row.structured_content?.sections?.experience,
     );
   }
+  // Regression: a PDF whose links exist only as hyperlink annotations (icon-style contact links,
+  // extremely common in resume templates), never in the visible text layer, must still surface
+  // those real URLs — otherwise the model can't use the real link and may guess a wrong one.
+  const linkId = await uploadResume(u, "sample-resume-with-links.pdf", "pdf");
+  const linkR = await api(u, "/api/extract-resume", { resumeId: linkId });
+  check(
+    "pdf with icon-only hyperlinks: real URLs recovered from annotations, not just visible text",
+    [
+      "github.com/janedoe-dev",
+      "linkedin.com/in/jane-doe-98765",
+      "leetcode.com/u/janedoecodes",
+    ].every((s) => linkR.data?.extractedText?.includes(s)),
+    linkR.data?.extractedText,
+  );
+
+  // The "Re-extract from file" button on the review page just calls this same endpoint again for
+  // an already-extracted resume — proves it's safe to re-run and picks up the same real links.
+  const reextract = await api(u, "/api/extract-resume", { resumeId: linkId });
+  check(
+    "re-extracting an already-complete resume works and is idempotent",
+    reextract.status === 200 &&
+      reextract.data?.extractedText?.includes("github.com/janedoe-dev"),
+    JSON.stringify(reextract).slice(0, 200),
+  );
+
   const bad = crypto.randomUUID();
   check(
     "unknown resumeId → 404",

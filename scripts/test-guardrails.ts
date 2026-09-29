@@ -264,15 +264,40 @@ errs(
   doc([HEADER, SUMMARY, EDU, EXP("Acme Corp", ["x."])].join("\n")),
   /sections_invalid/,
 );
-errs(
-  "unknown section",
+// A single non-template closing-section name is accepted, not rejected: real resumes use many
+// different headings for this kind of optional bonus content ("Achievements & Leadership" instead
+// of the template's "Awards & Achievements"), and nothing else in the checker depends on that exact
+// string — this is the real bug this file's other new regression test (below) was written from.
+const extraSectionOk = checkLatex(
   doc(
     [
       HEADER,
       SUMMARY,
       SKILLS("React"),
-      "\\section{Hacking}",
       EXP("Acme Corp", ["x."]),
+      EDU,
+      "\\section{Whatever You Call It}\n\\begin{itemize}[leftmargin=0.2in, label=\\textbullet, itemsep=2pt]\n\\small\n\\item x\n\\end{itemize}",
+    ].join("\n"),
+  ),
+  src,
+);
+check(
+  "a single non-template closing section is accepted, not rejected as 'unknown'",
+  extraSectionOk.ok,
+  extraSectionOk.errors.join(","),
+);
+
+errs(
+  "too many non-template sections (padding)",
+  doc(
+    [
+      HEADER,
+      SUMMARY,
+      SKILLS("React"),
+      EXP("Acme Corp", ["x."]),
+      "\\section{One}",
+      "\\section{Two}",
+      "\\section{Three}",
     ].join("\n"),
   ),
   /sections_invalid/,
@@ -366,6 +391,68 @@ check(
   "a repeated (non-backward) section header is not treated as out of order",
   repeatedSectionOk.ok,
   repeatedSectionOk.errors.join(","),
+);
+
+// Direct regression test for a real user's failure: their resume's own closing section was called
+// "Achievements & Leadership" (genuinely accurate — the bullets are about founding a company and
+// building a community, not literally "awards"), which the model preserved verbatim instead of
+// forcing it into the template's exact "Awards & Achievements" wording.
+const achievementsLeadershipOk = checkLatex(
+  doc(
+    [
+      HEADER,
+      SUMMARY,
+      SKILLS("React"),
+      EXP("Acme Corp", ["Developed things."]),
+      EDU,
+      String.raw`\section{Achievements \& Leadership}
+\begin{itemize}[leftmargin=0.2in, label=\textbullet, itemsep=2pt]
+\small
+\item Co-founded a startup serving international clients.
+\end{itemize}`,
+    ].join("\n"),
+  ),
+  src,
+);
+check(
+  "real-world closing section name ('Achievements & Leadership' vs template's 'Awards & Achievements') accepted",
+  achievementsLeadershipOk.ok,
+  achievementsLeadershipOk.errors.join(","),
+);
+
+// Regression: the summary-number check must only look at the actual prose, not the template's own
+// \vspace{2pt}/\vspace{4pt} spacing around it. Every fixture above happens to contain a literal "4"
+// somewhere else (a phone number, "4 years"), which accidentally masked this — this source
+// deliberately has no digit 4 anywhere, to isolate it.
+const noFourSource =
+  "Jane Doe\nRemote | jane.doe@example.com\nSoftware engineer with experience building reliable systems.\nExperience\nAcme Corp, Engineer, 2021 -- 2023\nBuilt things.";
+const noFourOk = checkLatex(
+  doc(
+    [
+      String.raw`\begin{center}
+    {\Huge\scshape\textbf{Jane Doe}} \\[4pt]
+    \small Remote $|$ \href{mailto:jane.doe@example.com}{jane.doe@example.com}
+\end{center}`,
+      String.raw`\section{Professional Summary}
+\vspace{2pt}
+\small{Software engineer with experience building reliable systems.}
+\vspace{4pt}`,
+      SKILLS("React"),
+      String.raw`\section{Experience}
+\resumeSubHeadingListStart
+  \resumeSubheading{Acme Corp}{2021 -- 2023}{Engineer}{}
+  \resumeItemListStart
+    \resumeItem{Built things.}
+  \resumeItemListEnd
+\resumeSubHeadingListEnd`,
+    ].join("\n"),
+  ),
+  noFourSource,
+);
+check(
+  "template's own \\vspace{4pt} spacing is not mistaken for a fabricated '4' claim in the summary",
+  noFourOk.ok,
+  noFourOk.errors.join(","),
 );
 
 process.exit(fails ? 1 : 0);
