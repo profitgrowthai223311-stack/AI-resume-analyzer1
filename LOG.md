@@ -3,6 +3,39 @@
 Session-by-session history of work done on this project. Newest entry at the top. See [CLAUDE.md](CLAUDE.md) for the
 logging convention and the current "remaining work" list.
 
+## 2026-09-29 — Diagnosed the recurring validation error from real data; fixed 4 real bugs
+
+- User reported the exact same "link_not_in_source, sections_invalid_or_out_of_order" error again. This time, instead
+  of reproducing synthetically, pulled the actual failing record straight from the database — the diagnostics added
+  in the previous LaTeX-validation session made this possible — and worked from real data throughout.
+- **Root cause 1 (extraction, not just validation):** the user's PDF renders GitHub/LinkedIn/LeetCode/CodeChef as icon
+  hyperlinks; the real URL exists only as a PDF link annotation, never in the visible text layer. `extractFromFile()`
+  (`src/lib/server/extract.ts`) now recovers these via pdf.js `getAnnotations()`, and the DOCX equivalent via
+  `mammoth.convertToHtml`, appending them as a `Links found in document:` block. This isn't just a checker
+  false-positive fix — downloaded the user's actual PDF and confirmed the model's guessed LinkedIn URL
+  (`mohan-rao`) was genuinely _wrong_; the real profile is `mohan-rao-b3b092257`. Recovering the real link fixes a
+  real defect. Also added an explicit prompt rule forbidding constructing a URL from a name/username.
+- **Root cause 2 (checker):** the resume's own closing section was called "Achievements & Leadership", not the
+  template's exact "Awards & Achievements" — rejected as an unknown section. `latex-check.ts`'s two optional trailing
+  slots now accept any reasonably-capped number of section names (capped at 2, so the model can't pad); the six
+  load-bearing core sections (the ones other logic keys off by exact name) stay strict.
+- **Root cause 3 (checker, found while writing the live regression test, not from the user's report):** the
+  summary-number check was reading the template's own literal `\vspace{4pt}` as if "4" were an unsupported claim —
+  masked in every prior test fixture (including all the ones from the last LaTeX session) by a coincidental "4"
+  elsewhere (a phone number, a percentage). Only surfaced because a fixture built for the link test happened not to
+  have one anywhere. Fixed by scoping the check to just the prose inside `\small{...}`.
+- Re-ran the actual real generation pipeline against the user's real (now-corrected) resume data three times as
+  fixes landed; went from failing on both original errors, to failing on an unrelated abbreviation edge case that
+  self-corrected via the existing retry, to a clean `ready` result with the correct LinkedIn URL. Cleaned up the
+  diagnostic version rows this created in their real account afterward.
+- Added a permanent fixture, `scripts/fixtures/sample-resume-with-links.pdf`, compiled through this project's own
+  LaTeX pipeline specifically to have real hyperlink annotations behind icon-only visible text, plus
+  `scripts/e2e-generate-links.mjs` for full-pipeline regression coverage and 3 new unit tests in
+  `test-guardrails.ts` (abbreviation-collision guard, flexible closing-section name, the `\vspace{4pt}` case) — 33
+  unit checks now, 159 across the full suite, all passing.
+- Added a "Re-extract from file" button on the resume review screen (`extraction-review-editor.tsx`) so a resume
+  uploaded before this fix — or any future extraction improvement — can pick it up without re-uploading.
+
 ## 2026-09-29 — Failed generations can now be retried in place
 
 - User couldn't actually retry a failed version — the "Try again" link just sent them to the tailor form to re-paste
