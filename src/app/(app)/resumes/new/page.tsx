@@ -9,10 +9,20 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { FREE_TOTAL_UPLOADS, getPlan, totalUploads } from "@/lib/server/plan";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Upload resume" };
 
-export default function NewResumePage() {
+export default async function NewResumePage() {
+  const supabase = await createClient();
+  const { data: c } = await supabase.auth.getClaims();
+  const uid = c!.claims.sub;
+  const [plan, used] = await Promise.all([
+    getPlan(supabase, uid),
+    totalUploads(supabase, uid),
+  ]);
+
   return (
     <>
       <PageHeader
@@ -33,7 +43,11 @@ export default function NewResumePage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResumeUploader />
+            <ResumeUploader
+              plan={plan}
+              used={used}
+              limit={FREE_TOTAL_UPLOADS}
+            />
           </CardContent>
         </Card>
         <div className="space-y-4">

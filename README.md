@@ -104,6 +104,25 @@ enabled in the Dashboard shows up automatically; no code change is needed when y
 `OPENAI_MODEL` defaults to `gpt-4.1-mini` for both the ATS analysis and the resume-generation steps. Override it in
 `.env.local` to use a different model.
 
+### Free-plan limits
+
+Two separate caps, both server-configurable and both enforced in a way the client can't bypass:
+
+- **Generations** (`FREE_MONTHLY_GENERATIONS`, default 2/month) — checked in `POST /api/generate-resume` before a
+  version is created; a failed generation doesn't count against it.
+- **Uploads** (`FREE_TOTAL_UPLOADS`, default 2 total, not monthly — per PRD §6) — resumes are inserted directly from
+  the browser via the user's own Supabase session (RLS-scoped to their own rows), so an application-level check alone
+  wouldn't stop someone from calling the Supabase client directly and skipping the UI. The real enforcement is a
+  Postgres trigger, `enforce_resume_upload_limit()` in
+  `supabase/migrations/20260930000001_free_upload_limit.sql`: it blocks the `INSERT` itself once a Free user already
+  has `FREE_TOTAL_UPLOADS` resume rows, and mirrors `getPlan()`'s Pro definition (an active subscription, or a
+  cancelled one still inside its paid period) so Pro users are unexempt from nothing. The upload limit's value is
+  hard-coded in that migration (`free_total_upload_limit`, since Postgres can't read `.env`); keep it in sync with
+  `FREE_TOTAL_UPLOADS`, which only drives the UI copy/progress bar. `npm run test:upload-limit` proves this live: two
+  uploads succeed, a third is rejected by the database even when called directly (bypassing the app's own checks
+  entirely), Pro and still-paid-but-cancelled users are unlimited, and the count is per-existing-row (deleting
+  resumes frees up the quota again).
+
 ### Deviation from the PRD
 
 The PRD names Supabase Edge Functions. Deploying those needs a Supabase access token, so the same contracts are
@@ -119,7 +138,7 @@ npm run test:guardrails                      # unit: LaTeX validator + fact chec
 ./scripts/dev-test-server.sh                 # build + start on :3111
 npm run test:rls && npm run test:extract && npm run test:ats \
   && npm run test:generate && npm run test:adversarial && npm run test:verify-payment \
-  && npm run test:billing && npm run test:pages
+  && npm run test:upload-limit && npm run test:billing && npm run test:pages
 ```
 
 The e2e scripts create temporary users in the configured Supabase project and delete them afterwards.
@@ -136,6 +155,5 @@ The e2e scripts create temporary users in the configured Supabase project and de
 ## Known limitations / next steps
 
 - Rate limiting is in-memory per instance; use a shared store (e.g. Upstash) for multi-instance production.
-- Free-plan **upload** cap (2) is not enforced yet; generation quota is.
 - `SUPABASE_DB_URL` is for CLI migrations only; the app never uses it.
 - `prompts.ts` holds the owner-supplied prompts plus the truthfulness override; bump the version constants when editing.

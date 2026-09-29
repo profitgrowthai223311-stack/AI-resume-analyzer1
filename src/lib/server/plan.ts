@@ -4,6 +4,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const FREE_MONTHLY_GENERATIONS = Number(
   process.env.FREE_MONTHLY_GENERATIONS ?? 2,
 );
+// Keep in sync with free_total_upload_limit in
+// supabase/migrations/20260930000001_free_upload_limit.sql, which is the actual enforcement
+// (a database trigger, so it can't be bypassed by calling the Supabase client directly). This
+// constant is only for surfacing the same number in the UI ahead of time.
+export const FREE_TOTAL_UPLOADS = Number(process.env.FREE_TOTAL_UPLOADS ?? 2);
 
 export async function getPlan(
   supabase: SupabaseClient,
@@ -23,6 +28,14 @@ export async function getPlan(
   )
     return "pro";
   return "free";
+}
+
+export async function totalUploads(supabase: SupabaseClient, userId: string) {
+  const { count } = await supabase
+    .from("resumes")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+  return count ?? 0;
 }
 
 export async function monthlyUsage(supabase: SupabaseClient, userId: string) {

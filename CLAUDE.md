@@ -36,7 +36,7 @@ npm run test:guardrails                      # unit, no server needed
 ./scripts/dev-test-server.sh                 # build + start on :3111 first
 npm run test:rls && npm run test:extract && npm run test:ats \
   && npm run test:generate && npm run test:adversarial && npm run test:verify-payment \
-  && npm run test:billing && npm run test:pages
+  && npm run test:upload-limit && npm run test:billing && npm run test:pages
 ```
 
 All of these hit the real configured Supabase project and Razorpay test-mode account (they create and clean up
@@ -46,9 +46,6 @@ temporary users/data). Run the relevant ones after any change that could affect 
 
 Not done yet, roughly in the order it likely matters:
 
-- **Free-plan upload cap.** The PRD's "2 resume uploads" limit for Free isn't enforced — only the 2/month generation
-  quota is. Needs a check in the upload path (`src/components/resume/resume-uploader.tsx` client insert, or better,
-  move the insert server-side so it can be gated).
 - **No GitHub remote yet.** The repo is local-only (`git remote -v` is empty). The PRD's branching/PR workflow
   (feature branches, branch protection, PR/issue templates — already scaffolded under `.github/`) hasn't been used
   for real yet.

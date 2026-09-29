@@ -11,7 +11,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { PRO_PLANS } from "@/lib/plans";
-import { FREE_MONTHLY_GENERATIONS } from "@/lib/server/plan";
+import {
+  FREE_MONTHLY_GENERATIONS,
+  FREE_TOTAL_UPLOADS,
+} from "@/lib/server/plan";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -58,6 +61,7 @@ export default async function PricingPage() {
               </CardHeader>
               <CardContent className="flex-1 space-y-3 text-sm">
                 {[
+                  `${FREE_TOTAL_UPLOADS} resume uploads total`,
                   `${FREE_MONTHLY_GENERATIONS} tailored resumes / month`,
                   "ATS match overview + basic gaps",
                   "PDF download",

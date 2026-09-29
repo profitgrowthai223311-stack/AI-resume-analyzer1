@@ -4,13 +4,16 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { ResumeCard } from "@/components/resume/resume-card";
 import { buttonVariants } from "@/components/ui/button";
+import { FREE_TOTAL_UPLOADS, getPlan } from "@/lib/server/plan";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "My resumes" };
 
 export default async function ResumesPage() {
   const supabase = await createClient();
-  const [{ data: resumes }, { data: versions }] = await Promise.all([
+  const { data: c } = await supabase.auth.getClaims();
+  const [plan, { data: resumes }, { data: versions }] = await Promise.all([
+    getPlan(supabase, c!.claims.sub),
     supabase
       .from("resumes")
       .select(
@@ -22,12 +25,17 @@ export default async function ResumesPage() {
   const counts = new Map<string, number>();
   for (const v of versions ?? [])
     counts.set(v.resume_id, (counts.get(v.resume_id) ?? 0) + 1);
+  const uploadCount = resumes?.length ?? 0;
 
   return (
     <>
       <PageHeader
         title="My resumes"
-        description="Your source resumes. Tailor each one to as many jobs as you like."
+        description={
+          plan === "free"
+            ? `Your source resumes. ${uploadCount} of ${FREE_TOTAL_UPLOADS} free uploads used.`
+            : "Your source resumes. Tailor each one to as many jobs as you like."
+        }
         actions={
           <Link href="/resumes/new" className={buttonVariants({ size: "lg" })}>
             <Plus className="size-4" /> Upload resume

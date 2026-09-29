@@ -30,6 +30,7 @@ const groups = [
       "SUPABASE_SERVICE_ROLE_KEY",
       "MAX_UPLOAD_MB",
       "FREE_MONTHLY_GENERATIONS",
+      "FREE_TOTAL_UPLOADS",
     ],
   },
   { phase: 5, vars: ["OPENAI_API_KEY", "OPENAI_MODEL"] },

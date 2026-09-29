@@ -3,6 +3,27 @@
 Session-by-session history of work done on this project. Newest entry at the top. See [CLAUDE.md](CLAUDE.md) for the
 logging convention and the current "remaining work" list.
 
+## 2026-09-29 — Enforced the Free plan's total-upload cap
+
+- Scoped to exactly one item from the remaining-work list at the user's request: PRD §6's "2 resume uploads total"
+  limit for Free, which wasn't enforced (only the 2/month generation quota was).
+- Since resume rows are inserted straight from the browser via the user's own Supabase session (not through an API
+  route), an application-level-only check could be bypassed by calling the Supabase client directly. Enforced it at
+  the database level instead: a new migration
+  (`supabase/migrations/20260930000001_free_upload_limit.sql`) adds a `BEFORE INSERT` trigger on `resumes` that
+  blocks the row once a Free user already has 2, mirroring `getPlan()`'s exact Pro definition (active, or cancelled
+  but still inside its paid period). Applied it to the live Supabase project.
+- Added `FREE_TOTAL_UPLOADS` (default 2) alongside the existing `FREE_MONTHLY_GENERATIONS`, and a `totalUploads()`
+  helper in `src/lib/server/plan.ts`.
+- Updated the uploader UI (`resume-uploader.tsx`) to show a usage meter, block the dropzone with an upgrade prompt
+  once at the limit, and translate the trigger's rejection into a friendly message rather than a generic error.
+  Surfaced the same numbers on `/resumes/new`, `/resumes`, and the pricing page's Free-plan feature list.
+- Wrote a live test (`scripts/e2e-upload-limit.mjs`, 16 checks) that proves the cap holds even when called directly
+  through the Supabase client with no app-level check in front of it at all — not just through the UI — and that
+  Pro/cancelled-but-paid users are unaffected and deleting resumes frees the quota back up. Full suite (127 checks
+  across all `test:*` scripts) re-run clean afterward, plus a production build.
+- Updated `README.md`'s "Free-plan limits" section and removed the now-done item from `CLAUDE.md`'s checklist.
+
 ## 2026-09-29 — Project status review; set up CLAUDE.md and LOG.md
 
 - Reviewed the whole project against the PRD to answer "what's left"; compiled it into a living checklist in
