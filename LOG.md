@@ -3,6 +3,27 @@
 Session-by-session history of work done on this project. Newest entry at the top. See [CLAUDE.md](CLAUDE.md) for the
 logging convention and the current "remaining work" list.
 
+## 2026-09-29 — Pushed to GitHub; fixed Netlify build failure (secrets scanner false positives)
+
+- Pushed the full codebase (26 commits, tags v0.1.0–v0.5.3) to
+  `https://github.com/profitgrowthai223311-stack/AI-resume-analyzer1` — authenticated via `gh auth login --web`
+  (device-code browser flow, per the user's request), which required switching to a third GitHub account not
+  previously logged into the local `gh` CLI. Verified `.env.example` on GitHub is still the blank template.
+- First Netlify build failed at "Secrets scanning found secrets in build output" — the build itself succeeded
+  (compiled, typechecked, all pages generated); Netlify's own post-build scanner flagged every configured env var's
+  value found anywhere in the repo or build output, with no awareness that `NEXT_PUBLIC_*` vars are _supposed_ to
+  ship to the browser.
+- Fixed in `netlify.toml`: `SECRETS_SCAN_OMIT_KEYS` for every var that isn't actually a credential (all `NEXT_PUBLIC_*`
+  vars, plus plain config like the model name, the public LaTeX compiler URL, plan IDs, numeric limits) — these
+  correctly appear in the client bundle and in source-code fallback defaults, which is exactly why the scan was
+  tripping on them. `SECRETS_SCAN_OMIT_PATHS` excludes the Next.js/Turbopack build cache directory, where the actual
+  real secrets (`RAZORPAY_KEY_SECRET`, `OPENAI_API_KEY`, `RAZORPAY_WEBHOOK_SECRET`, `SUPABASE_DB_URL`) turned up —
+  confirmed they appear _only_ there, never in anything actually served (functions, edge functions, static output).
+- Also flagged for the user: `SUPABASE_DB_URL` shouldn't be set on Netlify at all — it's CLI-only for local
+  migrations, the deployed app never reads it, and it holds the DB password, so it's pure unnecessary risk surface
+  there. Recommended removing it from Netlify's dashboard (no Netlify CLI installed locally to do this directly).
+- Updated the README's Netlify checklist with both notes; pushed the fix.
+
 ## 2026-09-29 — Diagnosed the recurring validation error from real data; fixed 4 real bugs
 
 - User reported the exact same "link_not_in_source, sections_invalid_or_out_of_order" error again. This time, instead
